@@ -3,17 +3,22 @@ const { isIP } = require('node:net');
 const { readFile } = require('node:fs/promises');
 const { resolve } = require('node:path');
 const { createServer } = require('node:http');
+const { parse } = require('node-html-parser');
 
 const port = Number(process.env.PORT || 3000);
 const host = process.env.HOST || '127.0.0.1';
 const resolverName = process.env.ADULT_FILTER_NAME || 'Cloudflare Family';
 const resolverUrl = new URL(process.env.ADULT_FILTER_DOH_URL || 'https://family.cloudflare-dns.com/dns-query');
+const invidiousOrigin = new URL(process.env.INVIDIOUS_INSTANCE_URL || 'https://invidious.tiekoetter.com');
 const publicDir = resolve(__dirname, 'public');
 const maxResponseBytes = 2 * 1024 * 1024;
 const requestTimeoutMs = 12000;
 
 if (resolverUrl.protocol !== 'https:' || resolverUrl.username || resolverUrl.password) {
   throw new Error('ADULT_FILTER_DOH_URL must be an HTTPS URL without embedded credentials.');
+}
+if (invidiousOrigin.protocol !== 'https:' || invidiousOrigin.username || invidiousOrigin.password || invidiousOrigin.pathname !== '/') {
+  throw new Error('INVIDIOUS_INSTANCE_URL must be an HTTPS origin without a path or credentials.');
 }
 
 function createError(message, status = 400) {
@@ -212,12 +217,78 @@ function sendJson(response, status, body) {
   response.end(JSON.stringify(body));
 }
 
+async function fetchInvidiousVideos(path) {
+  const url = new URL(path, invidiousOrigin);
+  let upstream;
+  try {
+    upstream = await fetch(url, {
+      redirect: 'manual',
+      headers: {
+        accept: 'text/html',
+        'user-agent': 'AnonWatcher/1.0 (+local video catalog)',
+      },
+      signal: AbortSignal.timeout(10000),
+    });
+  } catch {
+    throw createError('The Invidious instance could not be reached.', 502);
+  }
+  if (upstream.status >= 300 && upstream.status < 400) {
+    throw createError('The Invidious instance redirected this catalog request.', 502);
+  }
+  if (!upstream.ok) throw createError(`The Invidious instance returned HTTP ${upstream.status}.`, 502);
+  const html = await upstream.text();
+  if (html.length > 3 * 1024 * 1024) throw createError('The Invidious results page is too large.', 502);
+
+  const document = parse(html);
+  const videos = [];
+  for (const card of document.querySelectorAll('.pure-u-md-1-4')) {
+    const watchLink = card.querySelector('a[href^="/watch?v="]');
+    const href = watchLink?.getAttribute('href');
+    if (!href) continue;
+    const videoId = new URL(href, invidiousOrigin).searchParams.get('v') || '';
+    if (!/^[A-Za-z0-9_-]{11}$/.test(videoId)) continue;
+
+    const imagePath = card.querySelector('img.thumbnail')?.getAttribute('src') || '';
+    let thumbnail = '';
+    try {
+      const imageUrl = new URL(imagePath, invidiousOrigin);
+      if (imageUrl.origin === invidiousOrigin.origin) thumbnail = imageUrl.toString();
+    } catch {}
+
+    const title = card.querySelector('.video-card-row a[href^="/watch?v="]')?.textContent.trim() || 'Untitled video';
+    const author = card.querySelector('.channel-name')?.textContent.trim() || 'Unknown channel';
+    const duration = card.querySelector('.length')?.textContent.trim() || '';
+    const views = card.querySelector('.video-data')?.textContent.trim() || '';
+    videos.push({ videoId, title, author, duration, views, thumbnail });
+    if (videos.length >= 32) break;
+  }
+  return videos;
+}
+
 const httpServer = createServer(async (request, response) => {
   try {
+    const requestUrl = new URL(request.url, 'http://localhost');
+    if (request.method === 'GET' && requestUrl.pathname === '/api/videos') {
+      const mode = requestUrl.searchParams.get('mode') || 'trending';
+      let path;
+      if (mode === 'search') {
+        const query = (requestUrl.searchParams.get('q') || '').trim();
+        if (!query || query.length > 160) throw createError('Enter a search under 160 characters.');
+        path = `/search?q=${encodeURIComponent(query)}`;
+      } else if (mode === 'trending') {
+        const region = requestUrl.searchParams.get('region') || 'US';
+        if (!/^[A-Z]{2}$/.test(region)) throw createError('Choose a valid two-letter region.');
+        path = `/feed/trending?region=${encodeURIComponent(region)}`;
+      } else {
+        throw createError('Choose search or trending.', 400);
+      }
+      const videos = await fetchInvidiousVideos(path);
+      return sendJson(response, 200, { mode, videos, instance: invidiousOrigin.host });
+    }
     if (request.method === 'GET' && (request.url === '/' || request.url === '/index.html')) {
       response.writeHead(200, {
         'content-type': 'text/html; charset=utf-8',
-        'content-security-policy': "default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; frame-src https://www.youtube-nocookie.com; frame-ancestors 'none'",
+        'content-security-policy': `default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; img-src 'self' ${invidiousOrigin.origin}; frame-src https://www.youtube-nocookie.com; frame-ancestors 'none'`,
         'x-content-type-options': 'nosniff',
         'cache-control': 'no-store',
       });
@@ -242,5 +313,5 @@ const httpServer = createServer(async (request, response) => {
 
 httpServer.listen(port, host, () => {
   console.log(`Anon Watcher is ready at http://${host}:${port}`);
-  console.log('Videos load directly from YouTube privacy-enhanced embeds.');
+  console.log(`Search and trending from ${invidiousOrigin.host}; playback uses YouTube privacy-enhanced embeds.`);
 });

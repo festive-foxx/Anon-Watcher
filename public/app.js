@@ -6,7 +6,16 @@ const playerBar = document.querySelector('#player-bar');
 const shareButton = document.querySelector('#share-button');
 const clearButton = document.querySelector('#clear-button');
 const message = document.querySelector('#message');
+const searchForm = document.querySelector('#search-form');
+const searchInput = document.querySelector('#search-query');
+const trendingTab = document.querySelector('#trending-tab');
+const regionSelect = document.querySelector('#region-select');
+const catalogTitle = document.querySelector('#catalog-title');
+const catalogStatus = document.querySelector('#catalog-status');
+const videoGrid = document.querySelector('#video-grid');
 let currentVideoId = '';
+let currentMode = 'trending';
+let currentQuery = '';
 
 function extractVideoId(value) {
   const trimmed = value.trim();
@@ -68,6 +77,91 @@ function clearVideo(updateAddress = true) {
   if (updateAddress) window.history.replaceState({}, '', window.location.pathname);
 }
 
+function setBrowseState(mode) {
+  trendingTab.classList.toggle('active', mode === 'trending');
+  catalogTitle.textContent = mode === 'trending' ? 'Trending videos' : 'Search results';
+}
+
+function makeVideoCard(video) {
+  const card = document.createElement('article');
+  card.className = 'video-card';
+  const thumbnailButton = document.createElement('button');
+  thumbnailButton.type = 'button';
+  thumbnailButton.className = 'thumbnail-button';
+  thumbnailButton.setAttribute('aria-label', `Watch ${video.title}`);
+
+  if (video.thumbnail) {
+    const image = document.createElement('img');
+    image.src = video.thumbnail;
+    image.alt = '';
+    image.loading = 'lazy';
+    image.referrerPolicy = 'no-referrer';
+    thumbnailButton.append(image);
+  } else {
+    const fallback = document.createElement('span');
+    fallback.className = 'thumbnail-fallback';
+    fallback.textContent = 'AW';
+    thumbnailButton.append(fallback);
+  }
+
+  if (video.duration) {
+    const duration = document.createElement('span');
+    duration.className = 'video-duration';
+    duration.textContent = video.duration;
+    thumbnailButton.append(duration);
+  }
+  thumbnailButton.addEventListener('click', () => openVideo(video.videoId));
+
+  const title = document.createElement('button');
+  title.type = 'button';
+  title.className = 'video-title';
+  title.textContent = video.title;
+  title.addEventListener('click', () => openVideo(video.videoId));
+
+  const author = document.createElement('p');
+  author.className = 'video-author';
+  author.textContent = video.author;
+  const metadata = document.createElement('p');
+  metadata.className = 'video-metadata';
+  metadata.textContent = video.views;
+  card.append(thumbnailButton, title, author, metadata);
+  return card;
+}
+
+function openVideo(videoId) {
+  input.value = videoId;
+  showVideo(videoId);
+  document.querySelector('#watcher').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+async function loadCatalog(mode, query = '') {
+  currentMode = mode;
+  currentQuery = query;
+  setBrowseState(mode);
+  catalogStatus.textContent = 'Loading…';
+  videoGrid.replaceChildren();
+
+  const parameters = new URLSearchParams({ mode });
+  if (mode === 'search') parameters.set('q', query);
+  else parameters.set('region', regionSelect.value);
+
+  try {
+    const response = await fetch(`/api/videos?${parameters}`);
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Could not load videos.');
+    if (!result.videos.length) {
+      catalogStatus.textContent = 'No videos found';
+      return;
+    }
+    const fragment = document.createDocumentFragment();
+    for (const video of result.videos) fragment.append(makeVideoCard(video));
+    videoGrid.append(fragment);
+    catalogStatus.textContent = `${result.videos.length} videos · ${result.instance}`;
+  } catch (error) {
+    catalogStatus.textContent = error.message;
+  }
+}
+
 form.addEventListener('submit', (event) => {
   event.preventDefault();
   try {
@@ -92,6 +186,19 @@ shareButton.addEventListener('click', async () => {
 });
 
 clearButton.addEventListener('click', () => clearVideo());
+trendingTab.addEventListener('click', () => loadCatalog('trending'));
+regionSelect.addEventListener('change', () => {
+  if (currentMode === 'trending') loadCatalog('trending');
+});
+searchForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  const query = searchInput.value.trim();
+  if (!query) {
+    searchInput.focus();
+    return;
+  }
+  loadCatalog('search', query);
+});
 
 const initialVideo = new URLSearchParams(window.location.search).get('yt');
 if (initialVideo) {
@@ -101,4 +208,12 @@ if (initialVideo) {
   } catch (error) {
     message.textContent = error.message;
   }
+}
+
+const initialQuery = new URLSearchParams(window.location.search).get('q');
+if (initialQuery) {
+  searchInput.value = initialQuery;
+  loadCatalog('search', initialQuery);
+} else {
+  loadCatalog('trending');
 }
