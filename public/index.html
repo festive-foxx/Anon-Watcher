@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f4f1e9">
+  <title>Anon Proxy | Private Reader</title>
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <div class="shell">
+    <header>
+      <div class="brand"><span class="mark">a</span><span>anon proxy</span></div>
+      <div class="status"><i></i> managed access</div>
+    </header>
+    <main>
+      <section class="intro">
+        <div class="eyebrow">Authenticated reading gateway</div>
+        <h1>Open web.<br>Managed access.</h1>
+        <p>Read public HTTPS pages in a clean text view. Adult-content categories are filtered by the gateway before each request.</p>
+      </section>
+      <div class="workspace">
+        <section class="reader" aria-label="Proxy reader">
+          <form id="read-form">
+            <label for="url">HTTPS page address</label>
+            <div class="url-row">
+              <input id="url" name="url" type="url" placeholder="https://example.com" required autocomplete="url">
+              <button type="submit">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+                <span>Read page</span>
+              </button>
+            </div>
+            <div class="examples" id="filter-name">Content filter: loading…</div>
+          </form>
+          <div class="page" id="result" aria-live="polite">
+            <div class="placeholder"><div class="symbol">↳</div><p>Enter an approved HTTPS address to load its readable text here.</p></div>
+          </div>
+        </section>
+        <aside>
+          <h2>Connection details</h2>
+          <div class="side-row"><span>Access</span><strong>Sign-in required</strong></div>
+          <div class="side-row"><span>Destinations</span><strong>Public HTTPS</strong></div>
+          <div class="side-row"><span>Adult categories</span><strong>Filtered</strong></div>
+          <div class="side-row"><span>Page limit</span><strong>2 MB</strong></div>
+          <div class="notice">Category filters depend on provider classifications and are not perfect. The filter provider receives DNS queries. Access logs retain destination hostnames, not page paths or query strings.</div>
+        </aside>
+      </div>
+    </main>
+    <footer><span>ANON PROXY / MANAGED READER</span><span>TEXT ONLY · CATEGORY FILTER ACTIVE</span></footer>
+  </div>
+  <script src="/app.js" defer></script>
+</body>
+</html>

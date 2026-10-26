@@ -1,0 +1,12 @@
+{
+  "name": "anon-proxy",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A restricted HTTPS reader proxy with an explicit host allowlist.",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
