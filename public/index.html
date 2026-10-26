@@ -3,50 +3,76 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#f4f1e9">
-  <title>Anon Proxy | Private Reader</title>
+  <meta name="theme-color" content="#f3f2ec">
+  <title>Anon Watcher | YouTube, on your terms</title>
   <link rel="stylesheet" href="/app.css">
 </head>
 <body>
   <div class="shell">
-    <header>
-      <div class="brand"><span class="mark">a</span><span>anon proxy</span></div>
-      <div class="status"><i></i> managed access</div>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Anon Watcher home">
+        <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M5 4.8c0-.8.9-1.3 1.6-.9l13 7.2a1 1 0 0 1 0 1.8l-13 7.2c-.7.4-1.6-.1-1.6-.9V4.8Z" fill="currentColor"/></svg></span>
+        <span>anon watcher</span>
+      </a>
+      <div class="top-note"><span class="live-dot"></span> PRIVACY-ENHANCED PLAYER</div>
     </header>
+
     <main>
       <section class="intro">
-        <div class="eyebrow">Authenticated reading gateway</div>
-        <h1>Open web.<br>Managed access.</h1>
-        <p>Read public HTTPS pages in a clean text view. Adult-content categories are filtered by the gateway before each request.</p>
+        <p class="kicker">A smaller window to YouTube</p>
+        <h1>Watch what<br>you came for.</h1>
+        <p class="lede">Paste a video link. Skip the feed, keep the player, and leave the watch history out of this page.</p>
       </section>
-      <div class="workspace">
-        <section class="reader" aria-label="Proxy reader">
-          <form id="read-form">
-            <label for="url">HTTPS page address</label>
-            <div class="url-row">
-              <input id="url" name="url" type="url" placeholder="https://example.com" required autocomplete="url">
-              <button type="submit">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
-                <span>Read page</span>
-              </button>
-            </div>
-            <div class="examples" id="filter-name">Content filter: loading…</div>
-          </form>
-          <div class="page" id="result" aria-live="polite">
-            <div class="placeholder"><div class="symbol">↳</div><p>Enter an approved HTTPS address to load its readable text here.</p></div>
+
+      <section class="watcher" aria-label="YouTube video watcher">
+        <form id="watch-form" class="watch-form">
+          <label for="video-link">YouTube link or video ID</label>
+          <div class="input-row">
+            <input id="video-link" name="yt" type="text" placeholder="youtube.com/watch?v=…" autocomplete="off" autocapitalize="off" spellcheck="false" required>
+            <button class="watch-button" type="submit"><span>Watch</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
           </div>
-        </section>
-        <aside>
-          <h2>Connection details</h2>
-          <div class="side-row"><span>Access</span><strong>Sign-in required</strong></div>
-          <div class="side-row"><span>Destinations</span><strong>Public HTTPS</strong></div>
-          <div class="side-row"><span>Adult categories</span><strong>Filtered</strong></div>
-          <div class="side-row"><span>Page limit</span><strong>2 MB</strong></div>
-          <div class="notice">Category filters depend on provider classifications and are not perfect. The filter provider receives DNS queries. Access logs retain destination hostnames, not page paths or query strings.</div>
-        </aside>
-      </div>
+          <p class="form-hint">YouTube, youtu.be, Shorts, live links, or an 11-character video ID.</p>
+        </form>
+
+        <div class="player-wrap" id="player-wrap">
+          <div class="empty-player" id="empty-player">
+            <span class="empty-glyph" aria-hidden="true"><svg viewBox="0 0 48 48" fill="none"><path d="M9 10.5c0-2 2.2-3.2 4-2.2l27 14.5a1.4 1.4 0 0 1 0 2.4l-27 14.5c-1.8 1-4-.2-4-2.2v-27Z" fill="currentColor"/></svg></span>
+            <p>Your video goes here.</p>
+            <span>Paste a link above to get started.</span>
+          </div>
+          <iframe id="video-player" title="YouTube video player" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen referrerpolicy="strict-origin-when-cross-origin" hidden></iframe>
+        </div>
+
+        <div class="player-bar" id="player-bar" hidden>
+          <div class="now-playing"><span class="playing-mark"></span><span id="video-label">NOW PLAYING</span></div>
+          <div class="player-actions">
+            <button class="icon-button" id="share-button" type="button" title="Copy share link" aria-label="Copy share link" disabled><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.1 0l2-2A5 5 0 0 0 12 3.9l-1.1 1.1m3.1 6a5 5 0 0 0-7.1 0l-2 2A5 5 0 0 0 12 20.1l1.1-1.1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+            <button class="icon-button" id="clear-button" type="button" title="Clear video" aria-label="Clear video"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+          </div>
+        </div>
+        <p class="message" id="message" role="status" aria-live="polite"></p>
+      </section>
+
+      <section class="details" aria-label="About privacy">
+        <div class="detail-block">
+          <span class="detail-index">01 / PLAYER</span>
+          <h2>Just the video</h2>
+          <p>No recommendations column or local watch history. Videos play in YouTube’s official privacy-enhanced embed.</p>
+        </div>
+        <div class="detail-block">
+          <span class="detail-index">02 / PRIVACY</span>
+          <h2>A clearer boundary</h2>
+          <p>The embed uses <code>youtube-nocookie.com</code>. YouTube still receives your connection and may process data when playback starts.</p>
+        </div>
+        <div class="detail-block">
+          <span class="detail-index">03 / SHARING</span>
+          <h2>Link straight in</h2>
+          <p>Add <code>?yt=VIDEO_ID</code> to a shared Anon Watcher link to open a video directly. Nothing is saved by this page.</p>
+        </div>
+      </section>
     </main>
-    <footer><span>ANON PROXY / MANAGED READER</span><span>TEXT ONLY · CATEGORY FILTER ACTIVE</span></footer>
+
+    <footer><span>ANON WATCHER</span><span>ONE VIDEO · NO LOCAL HISTORY</span></footer>
   </div>
   <script src="/app.js" defer></script>
 </body>

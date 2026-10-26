@@ -1,4 +1,3 @@
-const { createHash, timingSafeEqual } = require('node:crypto');
 const https = require('node:https');
 const { isIP } = require('node:net');
 const { readFile } = require('node:fs/promises');
@@ -7,17 +6,12 @@ const { createServer } = require('node:http');
 
 const port = Number(process.env.PORT || 3000);
 const host = process.env.HOST || '127.0.0.1';
-const username = process.env.PROXY_USERNAME || '';
-const password = process.env.PROXY_PASSWORD || '';
 const resolverName = process.env.ADULT_FILTER_NAME || 'Cloudflare Family';
 const resolverUrl = new URL(process.env.ADULT_FILTER_DOH_URL || 'https://family.cloudflare-dns.com/dns-query');
 const publicDir = resolve(__dirname, 'public');
 const maxResponseBytes = 2 * 1024 * 1024;
 const requestTimeoutMs = 12000;
 
-if (!username || password.length < 16) {
-  throw new Error('Set PROXY_USERNAME and a PROXY_PASSWORD with at least 16 characters before starting.');
-}
 if (resolverUrl.protocol !== 'https:' || resolverUrl.username || resolverUrl.password) {
   throw new Error('ADULT_FILTER_DOH_URL must be an HTTPS URL without embedded credentials.');
 }
@@ -26,50 +20,6 @@ function createError(message, status = 400) {
   const error = new Error(message);
   error.status = status;
   return error;
-}
-
-function logAccess(event, destination, outcome, actor = username) {
-  console.log(JSON.stringify({
-    time: new Date().toISOString(),
-    event,
-    user: actor,
-    host: destination || null,
-    outcome,
-  }));
-}
-
-function matchesSecret(actual, expected) {
-  const actualHash = createHash('sha256').update(actual).digest();
-  const expectedHash = createHash('sha256').update(expected).digest();
-  return timingSafeEqual(actualHash, expectedHash);
-}
-
-function isAuthorized(request) {
-  const match = /^Basic\s+(.+)$/i.exec(request.headers.authorization || '');
-  if (!match) return false;
-  let credentials;
-  try {
-    credentials = Buffer.from(match[1], 'base64').toString('utf8');
-  } catch {
-    return false;
-  }
-  const separator = credentials.indexOf(':');
-  if (separator < 0) return false;
-  const usernameMatches = matchesSecret(credentials.slice(0, separator), username);
-  const passwordMatches = matchesSecret(credentials.slice(separator + 1), password);
-  return usernameMatches && passwordMatches;
-}
-
-function requireAuthorization(request, response) {
-  if (isAuthorized(request)) return true;
-  response.writeHead(401, {
-    'www-authenticate': 'Basic realm="Anon Proxy", charset="UTF-8"',
-    'cache-control': 'no-store',
-    'content-type': 'text/plain; charset=utf-8',
-    'x-content-type-options': 'nosniff',
-  });
-  response.end('Authentication required');
-  return false;
 }
 
 function isPublicIpv4(address) {
@@ -263,42 +213,11 @@ function sendJson(response, status, body) {
 }
 
 const httpServer = createServer(async (request, response) => {
-  if (!requireAuthorization(request, response)) {
-    if (request.url === '/api/read') logAccess('read', null, 'unauthorized', null);
-    return;
-  }
-
-  let destination = null;
-  let isReadRequest = false;
   try {
-    if (request.method === 'GET' && request.url === '/api/config') {
-      return sendJson(response, 200, {
-        filter: { name: resolverName, enabled: true },
-        access: 'authenticated',
-        maxResponseBytes,
-      });
-    }
-    if (request.method === 'POST' && request.url === '/api/read') {
-      isReadRequest = true;
-      let body = '';
-      for await (const chunk of request) {
-        body += chunk;
-        if (body.length > 4096) throw createError('Request is too large.', 413);
-      }
-      const payload = JSON.parse(body);
-      try {
-        destination = new URL(payload.url).hostname;
-      } catch {
-        destination = null;
-      }
-      const page = await readPage(payload.url);
-      logAccess('read', destination, 'allowed');
-      return sendJson(response, 200, page);
-    }
     if (request.method === 'GET' && (request.url === '/' || request.url === '/index.html')) {
       response.writeHead(200, {
         'content-type': 'text/html; charset=utf-8',
-        'content-security-policy': "default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'",
+        'content-security-policy': "default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; frame-src https://www.youtube-nocookie.com; frame-ancestors 'none'",
         'x-content-type-options': 'nosniff',
         'cache-control': 'no-store',
       });
@@ -315,7 +234,6 @@ const httpServer = createServer(async (request, response) => {
     }
     response.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' }).end('Not found');
   } catch (error) {
-    if (isReadRequest) logAccess('read', destination, error.status === 403 ? 'blocked' : 'error');
     return sendJson(response, error.status || (error instanceof SyntaxError ? 400 : 500), {
       error: error.message || 'The request could not be completed.',
     });
@@ -323,7 +241,6 @@ const httpServer = createServer(async (request, response) => {
 });
 
 httpServer.listen(port, host, () => {
-  console.log(`Anon Proxy is ready at http://${host}:${port}`);
-  console.log(`Adult-content filter: ${resolverName}`);
-  console.log('Access logs include destination hostnames, but not URL paths or query strings.');
+  console.log(`Anon Watcher is ready at http://${host}:${port}`);
+  console.log('Videos load directly from YouTube privacy-enhanced embeds.');
 });
