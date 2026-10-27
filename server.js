@@ -274,7 +274,12 @@ const httpServer = createServer(async (request, response) => {
       if (mode === 'search') {
         const query = (requestUrl.searchParams.get('q') || '').trim();
         if (!query || query.length > 160) throw createError('Enter a search under 160 characters.');
-        path = `/search?q=${encodeURIComponent(query)}`;
+        const pageValue = requestUrl.searchParams.get('page') || '1';
+        const page = Number(pageValue);
+        if (!/^\d+$/.test(pageValue) || !Number.isSafeInteger(page) || page < 1 || page > 1000) {
+          throw createError('Choose a valid search results page.');
+        }
+        path = `/search?q=${encodeURIComponent(query)}&page=${page}`;
       } else if (mode === 'trending') {
         const region = requestUrl.searchParams.get('region') || 'US';
         if (!/^[A-Z]{2}$/.test(region)) throw createError('Choose a valid two-letter region.');

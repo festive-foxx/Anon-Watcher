@@ -13,9 +13,12 @@ const regionSelect = document.querySelector('#region-select');
 const catalogTitle = document.querySelector('#catalog-title');
 const catalogStatus = document.querySelector('#catalog-status');
 const videoGrid = document.querySelector('#video-grid');
+const nextPageButton = document.querySelector('#next-page-button');
 let currentVideoId = '';
 let currentMode = 'trending';
 let currentQuery = '';
+let currentPage = 1;
+let catalogRequestId = 0;
 
 function extractVideoId(value) {
   const trimmed = value.trim();
@@ -134,31 +137,53 @@ function openVideo(videoId) {
   document.querySelector('#watcher').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-async function loadCatalog(mode, query = '') {
+async function loadCatalog(mode, query = '', page = 1) {
+  const requestId = ++catalogRequestId;
   currentMode = mode;
   currentQuery = query;
   setBrowseState(mode);
   catalogStatus.textContent = 'Loading…';
-  videoGrid.replaceChildren();
+  if (page === 1) {
+    currentPage = 1;
+    videoGrid.replaceChildren();
+    nextPageButton.hidden = true;
+    nextPageButton.disabled = false;
+  } else {
+    nextPageButton.disabled = true;
+    nextPageButton.textContent = 'Loading…';
+  }
 
   const parameters = new URLSearchParams({ mode });
   if (mode === 'search') parameters.set('q', query);
   else parameters.set('region', regionSelect.value);
+  if (mode === 'search') parameters.set('page', String(page));
 
   try {
     const response = await fetch(`/api/videos?${parameters}`);
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || 'Could not load videos.');
+    if (requestId !== catalogRequestId) return;
     if (!result.videos.length) {
-      catalogStatus.textContent = 'No videos found';
+      catalogStatus.textContent = page === 1 ? 'No videos found' : `No more videos · ${result.instance}`;
+      nextPageButton.hidden = true;
       return;
     }
     const fragment = document.createDocumentFragment();
     for (const video of result.videos) fragment.append(makeVideoCard(video));
     videoGrid.append(fragment);
-    catalogStatus.textContent = `${result.videos.length} videos · ${result.instance}`;
+    currentPage = page;
+    catalogStatus.textContent = `${videoGrid.children.length} videos · ${result.instance}`;
+    nextPageButton.hidden = mode !== 'search';
   } catch (error) {
-    catalogStatus.textContent = error.message;
+    if (requestId === catalogRequestId) {
+      catalogStatus.textContent = error.message;
+      nextPageButton.hidden = mode !== 'search' || videoGrid.children.length === 0;
+    }
+  } finally {
+    if (requestId === catalogRequestId) {
+      nextPageButton.disabled = false;
+      nextPageButton.textContent = 'Next page';
+    }
   }
 }
 
@@ -198,6 +223,11 @@ searchForm.addEventListener('submit', (event) => {
     return;
   }
   loadCatalog('search', query);
+});
+nextPageButton.addEventListener('click', () => {
+  if (currentMode !== 'search' || nextPageButton.disabled) return;
+  nextPageButton.disabled = true;
+  loadCatalog('search', currentQuery, currentPage + 1);
 });
 
 const initialVideo = new URLSearchParams(window.location.search).get('yt');
