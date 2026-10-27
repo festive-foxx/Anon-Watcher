@@ -14,11 +14,121 @@ const catalogTitle = document.querySelector('#catalog-title');
 const catalogStatus = document.querySelector('#catalog-status');
 const videoGrid = document.querySelector('#video-grid');
 const nextPageButton = document.querySelector('#next-page-button');
+const isGitHubPages = window.location.hostname === 'festive-foxx.github.io'
+  && window.location.pathname.startsWith('/Anon-Watcher/');
+const instanceDirectoryUrl = 'https://api.invidious.io/instances.json?sort_by=api';
 let currentVideoId = '';
 let currentMode = 'trending';
 let currentQuery = '';
 let currentPage = 1;
 let catalogRequestId = 0;
+let availableInstances;
+
+function getAvailableInstances() {
+  if (!availableInstances) {
+    availableInstances = fetch(instanceDirectoryUrl, {
+      headers: { accept: 'application/json' },
+      signal: AbortSignal.timeout(8000),
+    }).then(async (response) => {
+      if (!response.ok) throw new Error(`Invidious directory returned HTTP ${response.status}.`);
+      const entries = await response.json();
+      return entries
+        .map(([, details]) => details)
+        .filter((details) => details?.api && details.cors && details.type === 'https'
+          && details.monitor?.down === false)
+        .map((details) => {
+          try {
+            const url = new URL(details.uri);
+            if (url.protocol !== 'https:' || url.username || url.password
+              || (url.port && url.port !== '443') || url.pathname !== '/') return null;
+            return url;
+          } catch {
+            return null;
+          }
+        })
+        .filter(Boolean)
+        .slice(0, 8);
+    }).catch((error) => {
+      availableInstances = undefined;
+      throw error;
+    });
+  }
+  return availableInstances;
+}
+
+function formatDuration(seconds) {
+  if (!Number.isFinite(seconds) || seconds < 0) return '';
+  const totalSeconds = Math.floor(seconds);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const remainingSeconds = totalSeconds % 60;
+  return hours
+    ? `${hours}:${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`
+    : `${minutes}:${String(remainingSeconds).padStart(2, '0')}`;
+}
+
+function mapApiVideo(video, instanceUrl) {
+  if (!/^[A-Za-z0-9_-]{11}$/.test(video.videoId || '')) return null;
+  const thumbnails = Array.isArray(video.videoThumbnails) ? video.videoThumbnails : [];
+  let thumbnail = '';
+  for (const candidate of thumbnails) {
+    try {
+      const url = new URL(candidate.url, instanceUrl);
+      if (url.protocol === 'https:' && (url.origin === instanceUrl.origin
+        || url.hostname === 'i.ytimg.com' || url.hostname === 'img.youtube.com')) {
+        thumbnail = url.toString();
+        break;
+      }
+    } catch {}
+  }
+  const views = video.viewCountText || (Number.isFinite(video.viewCount)
+    ? `${video.viewCount.toLocaleString()} views` : '');
+  return {
+    videoId: video.videoId,
+    title: typeof video.title === 'string' ? video.title : 'Untitled video',
+    author: typeof video.author === 'string' ? video.author : 'Unknown channel',
+    duration: formatDuration(video.lengthSeconds),
+    views,
+    thumbnail,
+  };
+}
+
+async function loadPagesCatalog(mode, query, page = 1) {
+  const instances = await getAvailableInstances();
+  if (!instances.length) throw new Error('No CORS-enabled Invidious instances are currently available.');
+
+  let lastError;
+  for (const instanceUrl of instances) {
+    const endpoint = mode === 'search'
+      ? new URL('/api/v1/search', instanceUrl)
+      : new URL('/api/v1/trending', instanceUrl);
+    if (mode === 'search') {
+      endpoint.searchParams.set('q', query);
+      endpoint.searchParams.set('type', 'video');
+      endpoint.searchParams.set('page', String(page));
+    } else {
+      endpoint.searchParams.set('region', regionSelect.value);
+    }
+
+    try {
+      const response = await fetch(endpoint, {
+        headers: { accept: 'application/json' },
+        redirect: 'error',
+        signal: AbortSignal.timeout(7000),
+      });
+      if (!response.ok) throw new Error(`${instanceUrl.host} returned HTTP ${response.status}.`);
+      const videos = await response.json();
+      if (!Array.isArray(videos)) throw new Error(`${instanceUrl.host} returned an invalid catalog response.`);
+      return {
+        videos: videos.map((video) => mapApiVideo(video, instanceUrl)).filter(Boolean).slice(0, 32),
+        instance: instanceUrl.host,
+      };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw new Error(lastError?.message || 'No Invidious instance could load the catalog.');
+}
 
 function extractVideoId(value) {
   const trimmed = value.trim();
@@ -159,9 +269,14 @@ async function loadCatalog(mode, query = '', page = 1) {
   if (mode === 'search') parameters.set('page', String(page));
 
   try {
-    const response = await fetch(`/api/videos?${parameters}`);
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.error || 'Could not load videos.');
+    let result;
+    if (isGitHubPages) {
+      result = await loadPagesCatalog(mode, query, page);
+    } else {
+      const response = await fetch(`/api/videos?${parameters}`);
+      result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Could not load videos.');
+    }
     if (requestId !== catalogRequestId) return;
     if (!result.videos.length) {
       catalogStatus.textContent = page === 1 ? 'No videos found' : `No more videos · ${result.instance}`;

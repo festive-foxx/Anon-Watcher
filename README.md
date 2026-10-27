@@ -19,3 +19,11 @@ Open `http://localhost:3000`. The server binds to `127.0.0.1` by default. Set `P
 The default catalog instance is `https://invidious.tiekoetter.com`. Set `INVIDIOUS_INSTANCE_URL` to another trusted HTTPS Invidious origin if needed. The adapter only requests that origin's generated search and trending paths; it does not fetch arbitrary URLs. Instance availability and rate limits can affect catalog results.
 
 For shared deployment, put the service behind an access-controlled HTTPS reverse proxy and firewall.
+
+## GitHub Pages
+
+The GitHub Pages version is a static site and does not run `server.js`. It discovers currently online, CORS-enabled HTTPS instances from the public Invidious instance directory, then calls their JSON API directly from the browser for search and trending. If an instance is unavailable, it tries another listed instance. Availability, CORS policy, and rate limits are outside this project's control.
+
+The Pages site retains the direct YouTube link/video ID player and privacy-enhanced YouTube embed. Search queries go to the chosen Invidious instance; thumbnail and playback requests may go to Invidious and YouTube. This is not anonymity, and Pages does not provide a server-side proxy.
+
+The workflow in `.github/workflows/pages.yml` publishes the `public/` directory to GitHub Pages on pushes to `main`. Enable GitHub Pages with **Build and deployment → Source: GitHub Actions** in the repository settings if it is not already enabled.
