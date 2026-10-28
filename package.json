@@ -1,5 +1,5 @@
 {
-  "name": "anon-proxy",
+  "name": "Anon-Watcher",
   "version": "1.0.0",
   "private": true,
   "description": "A restricted HTTPS reader proxy with an explicit host allowlist.",

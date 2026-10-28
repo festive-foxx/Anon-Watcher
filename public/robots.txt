@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://festive-foxx.github.io/Anon-Proxy/sitemap.xml
+Sitemap: https://festive-foxx.github.io/Anon-Watcher/sitemap.xml
