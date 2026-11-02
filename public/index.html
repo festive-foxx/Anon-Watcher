@@ -47,12 +47,12 @@
       <section class="watcher" id="watcher" aria-label="YouTube video watcher">
         <div class="watcher-heading"><div><p class="kicker">NOW PLAYING</p><h2>Open a video</h2></div><span>YOUTUBE EMBED</span></div>
         <form id="watch-form" class="watch-form">
-          <label for="video-link">YouTube link or video ID</label>
+          <label for="video-link">YouTube video or playlist link, or video ID</label>
           <div class="input-row">
-            <input id="video-link" name="yt" type="text" placeholder="youtube.com/watch?v=…" autocomplete="off" autocapitalize="off" spellcheck="false" required>
+            <input id="video-link" name="yt" type="text" placeholder="YouTube video or playlist URL" autocomplete="off" autocapitalize="off" spellcheck="false" required>
             <button class="watch-button" type="submit"><span>Watch</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
           </div>
-          <p class="form-hint">YouTube, youtu.be, Shorts, live links, or an 11-character video ID.</p>
+          <p class="form-hint">YouTube video or playlist URLs, youtu.be, Shorts, live links, or an 11-character video ID.</p>
         </form>
 
         <div class="player-wrap" id="player-wrap">
@@ -94,12 +94,12 @@
         <div class="detail-block">
           <span class="detail-index">02 / PLAYER</span>
           <h2>Keep the link flow</h2>
-          <p>Paste a YouTube link or video ID. Playback uses the official <code>youtube-nocookie.com</code> embed.</p>
+          <p>Paste a YouTube video or playlist link, or a video ID. Playback uses the official <code>youtube-nocookie.com</code> embed.</p>
         </div>
         <div class="detail-block">
           <span class="detail-index">03 / PRIVACY</span>
           <h2>No local history</h2>
-          <p>Share links use <code>?yt=VIDEO_ID</code>. The selected Invidious instance receives search queries; YouTube receives playback requests. This is not anonymity.</p>
+          <p>Share links use <code>?yt=VIDEO_ID</code> or <code>?list=PLAYLIST_ID</code>. The selected Invidious instance receives search queries; YouTube receives playback requests. This is not anonymity.</p>
         </div>
       </section>
     </main>

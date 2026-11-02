@@ -23,6 +23,7 @@ const isGitHubPages = window.location.hostname === 'festive-foxx.github.io'
   && window.location.pathname.startsWith('/Anon-Watcher/');
 const instanceDirectoryUrl = 'https://api.invidious.io/instances.json?sort_by=api';
 let currentVideoId = '';
+let currentPlaylistId = '';
 let currentMode = 'trending';
 let currentQuery = '';
 let currentPage = 1;
@@ -214,9 +215,9 @@ async function loadServerPlaylist(playlistId) {
   return result;
 }
 
-function extractVideoId(value) {
+function extractYouTubeTarget(value) {
   const trimmed = value.trim();
-  if (/^[A-Za-z0-9_-]{11}$/.test(trimmed)) return trimmed;
+  if (/^[A-Za-z0-9_-]{11}$/.test(trimmed)) return { videoId: trimmed, playlistId: '' };
 
   let url;
   try {
@@ -230,6 +231,11 @@ function extractVideoId(value) {
     throw new Error('Use a link from YouTube or youtu.be.');
   }
 
+  const playlistId = url.searchParams.get('list') || '';
+  if (playlistId && !/^[A-Za-z0-9_-]{1,128}$/.test(playlistId)) {
+    throw new Error('That link does not contain a valid YouTube playlist ID.');
+  }
+
   let videoId = '';
   if (hostname === 'youtu.be') {
     videoId = url.pathname.split('/').filter(Boolean)[0] || '';
@@ -240,15 +246,19 @@ function extractVideoId(value) {
     videoId = match?.[1] || '';
   }
 
+  if (playlistId && !videoId) return { videoId: '', playlistId };
   if (!/^[A-Za-z0-9_-]{11}$/.test(videoId)) {
-    throw new Error('That link does not contain a valid YouTube video ID.');
+    throw new Error('That link does not contain a valid YouTube video or playlist ID.');
   }
-  return videoId;
+  return { videoId, playlistId };
 }
 
-function showVideo(videoId, updateAddress = true) {
+function showVideo(videoId, updateAddress = true, playlistId = '') {
   currentVideoId = videoId;
-  player.src = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(videoId)}?rel=0&playsinline=1`;
+  currentPlaylistId = playlistId;
+  const parameters = new URLSearchParams({ rel: '0', playsinline: '1' });
+  if (playlistId) parameters.set('list', playlistId);
+  player.src = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(videoId)}?${parameters}`;
   player.hidden = false;
   emptyPlayer.hidden = true;
   playerBar.hidden = false;
@@ -258,12 +268,31 @@ function showVideo(videoId, updateAddress = true) {
     const shareUrl = new URL(window.location.href);
     shareUrl.search = '';
     shareUrl.searchParams.set('yt', videoId);
+    if (playlistId) shareUrl.searchParams.set('list', playlistId);
+    window.history.replaceState({}, '', shareUrl);
+  }
+}
+
+function showPlaylist(playlistId, updateAddress = true) {
+  currentVideoId = '';
+  currentPlaylistId = playlistId;
+  player.src = `https://www.youtube-nocookie.com/embed/videoseries?list=${encodeURIComponent(playlistId)}&rel=0&playsinline=1`;
+  player.hidden = false;
+  emptyPlayer.hidden = true;
+  playerBar.hidden = false;
+  shareButton.disabled = false;
+  message.textContent = '';
+  if (updateAddress) {
+    const shareUrl = new URL(window.location.href);
+    shareUrl.search = '';
+    shareUrl.searchParams.set('list', playlistId);
     window.history.replaceState({}, '', shareUrl);
   }
 }
 
 function clearVideo(updateAddress = true) {
   currentVideoId = '';
+  currentPlaylistId = '';
   player.src = 'about:blank';
   player.hidden = true;
   emptyPlayer.hidden = false;
@@ -356,6 +385,12 @@ function makePlaylistCard(playlist) {
   const metadata = document.createElement('p');
   metadata.className = 'video-metadata';
   metadata.textContent = `${playlist.videoCount.toLocaleString()} videos · Playlist`;
+  const playButton = document.createElement('button');
+  playButton.type = 'button';
+  playButton.className = 'card-action';
+  playButton.textContent = 'Play playlist';
+  playButton.setAttribute('aria-label', `Play playlist ${playlist.title}`);
+  playButton.addEventListener('click', () => openPlaylist(playlist.playlistId));
   const addButton = document.createElement('button');
   addButton.type = 'button';
   addButton.className = 'card-action';
@@ -379,7 +414,7 @@ function makePlaylistCard(playlist) {
       addButton.textContent = 'Queue playlist';
     }
   });
-  card.append(art, title, author, metadata, addButton);
+  card.append(art, title, author, metadata, playButton, addButton);
   return card;
 }
 
@@ -427,6 +462,12 @@ function addToQueue(video) {
 function openVideo(videoId) {
   input.value = videoId;
   showVideo(videoId);
+  document.querySelector('#watcher').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function openPlaylist(playlistId) {
+  input.value = `https://www.youtube.com/playlist?list=${playlistId}`;
+  showPlaylist(playlistId);
   document.querySelector('#watcher').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
@@ -492,7 +533,9 @@ async function loadCatalog(mode, query = '', page = 1) {
 form.addEventListener('submit', (event) => {
   event.preventDefault();
   try {
-    showVideo(extractVideoId(input.value));
+    const target = extractYouTubeTarget(input.value);
+    if (target.playlistId && !target.videoId) showPlaylist(target.playlistId);
+    else showVideo(target.videoId, true, target.playlistId);
   } catch (error) {
     message.textContent = error.message;
     input.focus();
@@ -500,10 +543,11 @@ form.addEventListener('submit', (event) => {
 });
 
 shareButton.addEventListener('click', async () => {
-  if (!currentVideoId) return;
+  if (!currentVideoId && !currentPlaylistId) return;
   const shareUrl = new URL(window.location.href);
   shareUrl.search = '';
-  shareUrl.searchParams.set('yt', currentVideoId);
+  if (currentVideoId) shareUrl.searchParams.set('yt', currentVideoId);
+  if (currentPlaylistId) shareUrl.searchParams.set('list', currentPlaylistId);
   try {
     await navigator.clipboard.writeText(shareUrl.toString());
     message.textContent = 'Share link copied.';
@@ -541,9 +585,28 @@ const initialVideo = new URLSearchParams(window.location.search).get('yt');
 if (initialVideo) {
   input.value = initialVideo;
   try {
-    showVideo(extractVideoId(initialVideo), false);
+    const target = extractYouTubeTarget(initialVideo);
+    const playlistId = target.playlistId || new URLSearchParams(window.location.search).get('list') || '';
+    if (playlistId && !/^[A-Za-z0-9_-]{1,128}$/.test(playlistId)) {
+      throw new Error('That link does not contain a valid YouTube playlist ID.');
+    }
+    if (target.videoId) showVideo(target.videoId, false, playlistId);
+    else showPlaylist(target.playlistId, false);
   } catch (error) {
     message.textContent = error.message;
+  }
+} else {
+  const initialPlaylist = new URLSearchParams(window.location.search).get('list');
+  if (initialPlaylist) {
+    try {
+      if (!/^[A-Za-z0-9_-]{1,128}$/.test(initialPlaylist)) {
+        throw new Error('That link does not contain a valid YouTube playlist ID.');
+      }
+      input.value = `https://www.youtube.com/playlist?list=${initialPlaylist}`;
+      showPlaylist(initialPlaylist, false);
+    } catch (error) {
+      message.textContent = error.message;
+    }
   }
 }
 
