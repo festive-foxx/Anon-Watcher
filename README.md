@@ -2,7 +2,7 @@
 
 Anon Watcher is an Invidious-style video browser. It loads trending and search results from a configured Invidious instance, then plays selected videos and playlists in YouTube's privacy-enhanced embed. Paste a YouTube video or playlist URL, or an 11-character video ID, to use the direct-watch flow. It accepts regular watch links, playlist links, `youtu.be`, Shorts, live, and embed URLs. Add `?yt=VIDEO_ID` or `?list=PLAYLIST_ID` to open a video or playlist directly, or use the share control to copy a link.
 
-Search results include videos and playlists and can be browsed page by page with the **Next page** button. Play playlists directly from search results, or add videos or all playable videos from a playlist to the in-page queue; queue entries can be played next, selected to play, removed, or cleared. The queue is held only in memory and is not saved.
+Search results can be filtered to show all results, videos, or playlists, and browsed page by page with the **Next page** button. Play playlists directly from search results, or add videos or all playable videos from a playlist to the in-page queue; queue entries can be played next, selected to play, removed, or cleared. The queue is held only in memory and is not saved.
 
 The page does not store watch history. Search terms are sent to the configured Invidious instance, and thumbnails load from that instance. The player uses `youtube-nocookie.com`; this is YouTube's privacy-enhanced embed mode, not anonymity. YouTube still receives the viewer's network connection and may process viewing data when playback begins. Embedding can be disabled by a video's owner, and age-restricted videos may require YouTube sign-in.
 

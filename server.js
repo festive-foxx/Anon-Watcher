@@ -354,13 +354,17 @@ const httpServer = createServer(async (request, response) => {
       if (mode === 'search') {
         const query = (requestUrl.searchParams.get('q') || '').trim();
         if (!query || query.length > 160) throw createError('Enter a search under 160 characters.');
+        const type = requestUrl.searchParams.get('type') || 'all';
+        if (!['all', 'video', 'playlist'].includes(type)) {
+          throw createError('Choose all results, videos, or playlists.');
+        }
         const pageValue = requestUrl.searchParams.get('page') || '1';
         const page = Number(pageValue);
         if (!/^\d+$/.test(pageValue) || !Number.isSafeInteger(page) || page < 1 || page > 1000) {
           throw createError('Choose a valid search results page.');
         }
         const results = await fetchInvidiousJson(
-          `/api/v1/search?q=${encodeURIComponent(query)}&type=all&page=${page}`,
+          `/api/v1/search?q=${encodeURIComponent(query)}&type=${type}&page=${page}`,
         );
         if (!Array.isArray(results)) throw createError('The Invidious instance returned an invalid catalog response.', 502);
         videos = [];

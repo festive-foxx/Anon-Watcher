@@ -8,6 +8,8 @@ const clearButton = document.querySelector('#clear-button');
 const message = document.querySelector('#message');
 const searchForm = document.querySelector('#search-form');
 const searchInput = document.querySelector('#search-query');
+const searchTypeControl = document.querySelector('#search-type-control');
+const searchTypeFilter = document.querySelector('#search-type-filter');
 const trendingTab = document.querySelector('#trending-tab');
 const regionSelect = document.querySelector('#region-select');
 const catalogTitle = document.querySelector('#catalog-title');
@@ -26,6 +28,7 @@ let currentVideoId = '';
 let currentPlaylistId = '';
 let currentMode = 'trending';
 let currentQuery = '';
+let currentSearchType = 'all';
 let currentPage = 1;
 let catalogRequestId = 0;
 const playbackQueue = [];
@@ -128,7 +131,7 @@ function mapApiPlaylist(playlist, instanceUrl) {
   };
 }
 
-async function loadPagesCatalog(mode, query, page = 1) {
+async function loadPagesCatalog(mode, query, page = 1, searchType = 'all') {
   const instances = await getAvailableInstances();
   if (!instances.length) throw new Error('No CORS-enabled Invidious instances are currently available.');
 
@@ -139,7 +142,7 @@ async function loadPagesCatalog(mode, query, page = 1) {
       : new URL('/api/v1/trending', instanceUrl);
     if (mode === 'search') {
       endpoint.searchParams.set('q', query);
-      endpoint.searchParams.set('type', 'all');
+      endpoint.searchParams.set('type', searchType);
       endpoint.searchParams.set('page', String(page));
     } else {
       endpoint.searchParams.set('region', regionSelect.value);
@@ -306,11 +309,14 @@ function clearVideo(updateAddress = true) {
 function setBrowseState(mode) {
   trendingTab.classList.toggle('active', mode === 'trending');
   catalogTitle.textContent = mode === 'trending' ? 'Trending videos' : 'Search results';
+  searchTypeControl.hidden = mode !== 'search';
 }
 
 function makeVideoCard(video) {
   const card = document.createElement('article');
   card.className = 'video-card';
+  const thumbnailWrap = document.createElement('div');
+  thumbnailWrap.className = 'thumbnail-wrap';
   const thumbnailButton = document.createElement('button');
   thumbnailButton.type = 'button';
   thumbnailButton.className = 'thumbnail-button';
@@ -338,6 +344,14 @@ function makeVideoCard(video) {
   }
   thumbnailButton.addEventListener('click', () => openVideo(video.videoId));
 
+  const addButton = document.createElement('button');
+  addButton.type = 'button';
+  addButton.className = 'video-queue-popup';
+  addButton.textContent = '+ Add to queue';
+  addButton.setAttribute('aria-label', `Add ${video.title} to queue`);
+  addButton.addEventListener('click', () => addToQueue(video));
+  thumbnailWrap.append(thumbnailButton, addButton);
+
   const title = document.createElement('button');
   title.type = 'button';
   title.className = 'video-title';
@@ -350,13 +364,7 @@ function makeVideoCard(video) {
   const metadata = document.createElement('p');
   metadata.className = 'video-metadata';
   metadata.textContent = video.views;
-  const addButton = document.createElement('button');
-  addButton.type = 'button';
-  addButton.className = 'card-action';
-  addButton.textContent = 'Add to queue';
-  addButton.setAttribute('aria-label', `Add ${video.title} to queue`);
-  addButton.addEventListener('click', () => addToQueue(video));
-  card.append(thumbnailButton, title, author, metadata, addButton);
+  card.append(thumbnailWrap, title, author, metadata);
   return card;
 }
 
@@ -471,10 +479,11 @@ function openPlaylist(playlistId) {
   document.querySelector('#watcher').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-async function loadCatalog(mode, query = '', page = 1) {
+async function loadCatalog(mode, query = '', page = 1, searchType = searchTypeFilter.value) {
   const requestId = ++catalogRequestId;
   currentMode = mode;
   currentQuery = query;
+  if (mode === 'search') currentSearchType = searchType;
   setBrowseState(mode);
   catalogStatus.textContent = 'Loading…';
   if (page === 1) {
@@ -488,14 +497,17 @@ async function loadCatalog(mode, query = '', page = 1) {
   }
 
   const parameters = new URLSearchParams({ mode });
-  if (mode === 'search') parameters.set('q', query);
+  if (mode === 'search') {
+    parameters.set('q', query);
+    parameters.set('type', currentSearchType);
+  }
   else parameters.set('region', regionSelect.value);
   if (mode === 'search') parameters.set('page', String(page));
 
   try {
     let result;
     if (isGitHubPages) {
-      result = await loadPagesCatalog(mode, query, page);
+      result = await loadPagesCatalog(mode, query, page, currentSearchType);
     } else {
       const response = await fetch(`/api/videos?${parameters}`);
       result = await response.json();
@@ -573,12 +585,17 @@ searchForm.addEventListener('submit', (event) => {
     searchInput.focus();
     return;
   }
-  loadCatalog('search', query);
+  loadCatalog('search', query, 1, searchTypeFilter.value);
+});
+searchTypeFilter.addEventListener('change', () => {
+  if (currentMode === 'search' && currentQuery) {
+    loadCatalog('search', currentQuery, 1, searchTypeFilter.value);
+  }
 });
 nextPageButton.addEventListener('click', () => {
   if (currentMode !== 'search' || nextPageButton.disabled) return;
   nextPageButton.disabled = true;
-  loadCatalog('search', currentQuery, currentPage + 1);
+  loadCatalog('search', currentQuery, currentPage + 1, currentSearchType);
 });
 
 const initialVideo = new URLSearchParams(window.location.search).get('yt');
@@ -613,7 +630,11 @@ if (initialVideo) {
 const initialQuery = new URLSearchParams(window.location.search).get('q');
 if (initialQuery) {
   searchInput.value = initialQuery;
-  loadCatalog('search', initialQuery);
+  const initialSearchType = new URLSearchParams(window.location.search).get('type');
+  if (['all', 'video', 'playlist'].includes(initialSearchType)) {
+    searchTypeFilter.value = initialSearchType;
+  }
+  loadCatalog('search', initialQuery, 1, searchTypeFilter.value);
 } else {
   loadCatalog('trending');
 }

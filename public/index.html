@@ -33,6 +33,13 @@
             <input id="search-query" type="search" placeholder="Search videos and playlists" aria-label="Search videos and playlists" autocomplete="off">
             <button type="submit" title="Search videos" aria-label="Search videos"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.3" stroke="currentColor" stroke-width="1.8"/><path d="m15.5 15.5 4.2 4.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
           </form>
+          <label class="search-type-control" id="search-type-control" for="search-type-filter" hidden>Show
+            <select id="search-type-filter" aria-label="Filter search results by type">
+              <option value="all">All results</option>
+              <option value="video">Videos</option>
+              <option value="playlist">Playlists</option>
+            </select>
+          </label>
           <label class="region-control" for="region-select">Region
             <select id="region-select" aria-label="Trending region">
               <option value="US">US</option><option value="GB">UK</option><option value="CA">CA</option><option value="DE">DE</option><option value="JP">JP</option>
