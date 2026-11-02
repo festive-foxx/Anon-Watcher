@@ -14,6 +14,11 @@ const catalogTitle = document.querySelector('#catalog-title');
 const catalogStatus = document.querySelector('#catalog-status');
 const videoGrid = document.querySelector('#video-grid');
 const nextPageButton = document.querySelector('#next-page-button');
+const queueCount = document.querySelector('#queue-count');
+const queuePlayNextButton = document.querySelector('#queue-play-next');
+const queueClearButton = document.querySelector('#queue-clear');
+const queueEmpty = document.querySelector('#queue-empty');
+const queueList = document.querySelector('#queue-list');
 const isGitHubPages = window.location.hostname === 'festive-foxx.github.io'
   && window.location.pathname.startsWith('/Anon-Watcher/');
 const instanceDirectoryUrl = 'https://api.invidious.io/instances.json?sort_by=api';
@@ -22,6 +27,7 @@ let currentMode = 'trending';
 let currentQuery = '';
 let currentPage = 1;
 let catalogRequestId = 0;
+const playbackQueue = [];
 let availableInstances;
 
 function getAvailableInstances() {
@@ -68,6 +74,7 @@ function formatDuration(seconds) {
 }
 
 function mapApiVideo(video, instanceUrl) {
+  if (!video || typeof video !== 'object') return null;
   if (!/^[A-Za-z0-9_-]{11}$/.test(video.videoId || '')) return null;
   const thumbnails = Array.isArray(video.videoThumbnails) ? video.videoThumbnails : [];
   let thumbnail = '';
@@ -93,6 +100,33 @@ function mapApiVideo(video, instanceUrl) {
   };
 }
 
+function mapApiPlaylist(playlist, instanceUrl) {
+  if (!playlist || typeof playlist !== 'object') return null;
+  if (!/^[A-Za-z0-9_-]+$/.test(playlist.playlistId || '')) return null;
+  const rawThumbnail = typeof playlist.playlistThumbnail === 'string'
+    ? playlist.playlistThumbnail
+    : Array.isArray(playlist.playlistThumbnails)
+      ? playlist.playlistThumbnails.find((thumbnail) => typeof thumbnail?.url === 'string')?.url
+      : '';
+  let thumbnail = '';
+  if (rawThumbnail) {
+    try {
+      const url = new URL(rawThumbnail, instanceUrl);
+      if (url.protocol === 'https:' && (url.origin === instanceUrl.origin
+        || url.hostname === 'i.ytimg.com' || url.hostname === 'img.youtube.com')) {
+        thumbnail = url.toString();
+      }
+    } catch {}
+  }
+  return {
+    playlistId: playlist.playlistId,
+    title: typeof playlist.title === 'string' ? playlist.title : 'Untitled playlist',
+    author: typeof playlist.author === 'string' ? playlist.author : 'Unknown channel',
+    videoCount: Number.isFinite(Number(playlist.videoCount)) ? Number(playlist.videoCount) : 0,
+    thumbnail,
+  };
+}
+
 async function loadPagesCatalog(mode, query, page = 1) {
   const instances = await getAvailableInstances();
   if (!instances.length) throw new Error('No CORS-enabled Invidious instances are currently available.');
@@ -104,7 +138,7 @@ async function loadPagesCatalog(mode, query, page = 1) {
       : new URL('/api/v1/trending', instanceUrl);
     if (mode === 'search') {
       endpoint.searchParams.set('q', query);
-      endpoint.searchParams.set('type', 'video');
+      endpoint.searchParams.set('type', 'all');
       endpoint.searchParams.set('page', String(page));
     } else {
       endpoint.searchParams.set('region', regionSelect.value);
@@ -117,10 +151,23 @@ async function loadPagesCatalog(mode, query, page = 1) {
         signal: AbortSignal.timeout(7000),
       });
       if (!response.ok) throw new Error(`${instanceUrl.host} returned HTTP ${response.status}.`);
-      const videos = await response.json();
-      if (!Array.isArray(videos)) throw new Error(`${instanceUrl.host} returned an invalid catalog response.`);
+      const entries = await response.json();
+      if (!Array.isArray(entries)) throw new Error(`${instanceUrl.host} returned an invalid catalog response.`);
+      const videos = [];
+      const playlists = [];
+      for (const entry of entries) {
+        if (!entry || typeof entry !== 'object') continue;
+        if (entry.type === 'playlist') {
+          const playlist = mapApiPlaylist(entry, instanceUrl);
+          if (playlist) playlists.push(playlist);
+        } else if (entry.type === 'video' || entry.videoId) {
+          const video = mapApiVideo(entry, instanceUrl);
+          if (video) videos.push(video);
+        }
+      }
       return {
-        videos: videos.map((video) => mapApiVideo(video, instanceUrl)).filter(Boolean).slice(0, 32),
+        videos: videos.slice(0, 32),
+        playlists: playlists.slice(0, 32),
         instance: instanceUrl.host,
       };
     } catch (error) {
@@ -128,6 +175,43 @@ async function loadPagesCatalog(mode, query, page = 1) {
     }
   }
   throw new Error(lastError?.message || 'No Invidious instance could load the catalog.');
+}
+
+async function loadPagesPlaylist(playlistId) {
+  const instances = await getAvailableInstances();
+  if (!instances.length) throw new Error('No CORS-enabled Invidious instances are currently available.');
+
+  let lastError;
+  for (const instanceUrl of instances) {
+    try {
+      const endpoint = new URL(`/api/v1/playlists/${encodeURIComponent(playlistId)}`, instanceUrl);
+      const response = await fetch(endpoint, {
+        headers: { accept: 'application/json' },
+        redirect: 'error',
+        signal: AbortSignal.timeout(7000),
+      });
+      if (!response.ok) throw new Error(`${instanceUrl.host} returned HTTP ${response.status}.`);
+      const playlist = await response.json();
+      if (!Array.isArray(playlist.videos)) {
+        throw new Error(`${instanceUrl.host} returned an invalid playlist response.`);
+      }
+      return {
+        videos: playlist.videos.map((video) => mapApiVideo(video, instanceUrl)).filter(Boolean),
+        instance: instanceUrl.host,
+      };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw new Error(lastError?.message || 'No Invidious instance could load this playlist.');
+}
+
+async function loadServerPlaylist(playlistId) {
+  const response = await fetch(`/api/playlists/${encodeURIComponent(playlistId)}`);
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error || 'Could not load this playlist.');
+  if (!Array.isArray(result.videos)) throw new Error('The server returned an invalid playlist response.');
+  return result;
 }
 
 function extractVideoId(value) {
@@ -237,8 +321,107 @@ function makeVideoCard(video) {
   const metadata = document.createElement('p');
   metadata.className = 'video-metadata';
   metadata.textContent = video.views;
-  card.append(thumbnailButton, title, author, metadata);
+  const addButton = document.createElement('button');
+  addButton.type = 'button';
+  addButton.className = 'card-action';
+  addButton.textContent = 'Add to queue';
+  addButton.setAttribute('aria-label', `Add ${video.title} to queue`);
+  addButton.addEventListener('click', () => addToQueue(video));
+  card.append(thumbnailButton, title, author, metadata, addButton);
   return card;
+}
+
+function makePlaylistCard(playlist) {
+  const card = document.createElement('article');
+  card.className = 'video-card playlist-card';
+  const art = document.createElement('div');
+  art.className = 'playlist-art';
+  if (playlist.thumbnail) {
+    const image = document.createElement('img');
+    image.src = playlist.thumbnail;
+    image.alt = '';
+    image.loading = 'lazy';
+    image.referrerPolicy = 'no-referrer';
+    art.append(image);
+  } else {
+    art.innerHTML = '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 5h16M4 10h16M4 15h10M4 20h10m5-5v7m-3.5-3.5h7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>';
+  }
+  const title = document.createElement('p');
+  title.className = 'video-title';
+  title.textContent = playlist.title;
+  title.title = playlist.title;
+  const author = document.createElement('p');
+  author.className = 'video-author';
+  author.textContent = playlist.author;
+  const metadata = document.createElement('p');
+  metadata.className = 'video-metadata';
+  metadata.textContent = `${playlist.videoCount.toLocaleString()} videos · Playlist`;
+  const addButton = document.createElement('button');
+  addButton.type = 'button';
+  addButton.className = 'card-action';
+  addButton.textContent = 'Queue playlist';
+  addButton.setAttribute('aria-label', `Add playlist ${playlist.title} to queue`);
+  addButton.addEventListener('click', async () => {
+    addButton.disabled = true;
+    addButton.textContent = 'Loading playlist…';
+    try {
+      const result = isGitHubPages
+        ? await loadPagesPlaylist(playlist.playlistId)
+        : await loadServerPlaylist(playlist.playlistId);
+      if (!result.videos.length) throw new Error('This playlist has no playable videos.');
+      for (const video of result.videos) playbackQueue.push(video);
+      renderQueue();
+      message.textContent = `Added ${result.videos.length} videos from “${playlist.title}” to the queue.`;
+    } catch (error) {
+      message.textContent = error.message;
+    } finally {
+      addButton.disabled = false;
+      addButton.textContent = 'Queue playlist';
+    }
+  });
+  card.append(art, title, author, metadata, addButton);
+  return card;
+}
+
+function renderQueue() {
+  queueCount.textContent = String(playbackQueue.length);
+  queuePlayNextButton.disabled = playbackQueue.length === 0;
+  queueClearButton.disabled = playbackQueue.length === 0;
+  queueEmpty.hidden = playbackQueue.length > 0;
+  queueList.replaceChildren();
+  for (const [index, video] of playbackQueue.entries()) {
+    const item = document.createElement('li');
+    item.className = 'queue-item';
+    const playButton = document.createElement('button');
+    playButton.type = 'button';
+    playButton.className = 'queue-play';
+    playButton.textContent = `${index + 1}. ${video.title} · ${video.author}`;
+    playButton.title = video.title;
+    playButton.addEventListener('click', () => playQueueItem(index));
+    const removeButton = document.createElement('button');
+    removeButton.type = 'button';
+    removeButton.className = 'queue-remove';
+    removeButton.textContent = 'Remove';
+    removeButton.setAttribute('aria-label', `Remove ${video.title} from queue`);
+    removeButton.addEventListener('click', () => {
+      playbackQueue.splice(index, 1);
+      renderQueue();
+    });
+    item.append(playButton, removeButton);
+    queueList.append(item);
+  }
+}
+
+function playQueueItem(index) {
+  const [video] = playbackQueue.splice(index, 1);
+  if (!video) return;
+  renderQueue();
+  openVideo(video.videoId);
+}
+
+function addToQueue(video) {
+  playbackQueue.push(video);
+  renderQueue();
 }
 
 function openVideo(videoId) {
@@ -278,16 +461,20 @@ async function loadCatalog(mode, query = '', page = 1) {
       if (!response.ok) throw new Error(result.error || 'Could not load videos.');
     }
     if (requestId !== catalogRequestId) return;
-    if (!result.videos.length) {
-      catalogStatus.textContent = page === 1 ? 'No videos found' : `No more videos · ${result.instance}`;
+    const playlists = result.playlists || [];
+    if (!result.videos.length && !playlists.length) {
+      catalogStatus.textContent = page === 1 ? 'No results found' : `No more results · ${result.instance}`;
       nextPageButton.hidden = true;
       return;
     }
     const fragment = document.createDocumentFragment();
     for (const video of result.videos) fragment.append(makeVideoCard(video));
+    for (const playlist of playlists) fragment.append(makePlaylistCard(playlist));
     videoGrid.append(fragment);
     currentPage = page;
-    catalogStatus.textContent = `${videoGrid.children.length} videos · ${result.instance}`;
+    catalogStatus.textContent = mode === 'search' && playlists.length
+      ? `${videoGrid.children.length} results · ${result.instance}`
+      : `${videoGrid.children.length} videos · ${result.instance}`;
     nextPageButton.hidden = mode !== 'search';
   } catch (error) {
     if (requestId === catalogRequestId) {
@@ -326,6 +513,11 @@ shareButton.addEventListener('click', async () => {
 });
 
 clearButton.addEventListener('click', () => clearVideo());
+queuePlayNextButton.addEventListener('click', () => playQueueItem(0));
+queueClearButton.addEventListener('click', () => {
+  playbackQueue.length = 0;
+  renderQueue();
+});
 trendingTab.addEventListener('click', () => loadCatalog('trending'));
 regionSelect.addEventListener('change', () => {
   if (currentMode === 'trending') loadCatalog('trending');
@@ -362,3 +554,4 @@ if (initialQuery) {
 } else {
   loadCatalog('trending');
 }
+renderQueue();

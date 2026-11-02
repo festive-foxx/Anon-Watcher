@@ -265,12 +265,92 @@ async function fetchInvidiousVideos(path) {
   return videos;
 }
 
+async function fetchInvidiousJson(path) {
+  let upstream;
+  try {
+    upstream = await fetch(new URL(path, invidiousOrigin), {
+      redirect: 'manual',
+      headers: {
+        accept: 'application/json',
+        'user-agent': 'AnonWatcher/1.0 (+local video catalog)',
+      },
+      signal: AbortSignal.timeout(10000),
+    });
+  } catch {
+    throw createError('The Invidious instance could not be reached.', 502);
+  }
+  if (upstream.status >= 300 && upstream.status < 400) {
+    throw createError('The Invidious instance redirected this catalog request.', 502);
+  }
+  if (!upstream.ok) throw createError(`The Invidious instance returned HTTP ${upstream.status}.`, 502);
+  const body = await upstream.text();
+  if (body.length > 3 * 1024 * 1024) throw createError('The Invidious results are too large.', 502);
+  try {
+    return JSON.parse(body);
+  } catch {
+    throw createError('The Invidious instance returned an invalid catalog response.', 502);
+  }
+}
+
+function mapInvidiousVideo(video) {
+  if (!video || typeof video !== 'object') return null;
+  if (!/^[A-Za-z0-9_-]{11}$/.test(video.videoId || '')) return null;
+  let thumbnail = '';
+  for (const candidate of Array.isArray(video.videoThumbnails) ? video.videoThumbnails : []) {
+    try {
+      const url = new URL(candidate.url, invidiousOrigin);
+      if (url.protocol === 'https:' && url.origin === invidiousOrigin.origin) {
+        thumbnail = url.toString();
+        break;
+      }
+    } catch {}
+  }
+  const seconds = Number.isFinite(video.lengthSeconds) && video.lengthSeconds >= 0
+    ? Math.floor(video.lengthSeconds)
+    : 0;
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const remainingSeconds = seconds % 60;
+  const duration = hours
+    ? `${hours}:${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`
+    : `${minutes}:${String(remainingSeconds).padStart(2, '0')}`;
+  return {
+    videoId: video.videoId,
+    title: typeof video.title === 'string' ? video.title : 'Untitled video',
+    author: typeof video.author === 'string' ? video.author : 'Unknown channel',
+    duration: video.lengthSeconds == null ? '' : duration,
+    views: video.viewCountText || (Number.isFinite(video.viewCount)
+      ? `${video.viewCount.toLocaleString()} views` : ''),
+    thumbnail,
+  };
+}
+
+function mapInvidiousPlaylist(playlist) {
+  if (!playlist || typeof playlist !== 'object') return null;
+  if (!/^[A-Za-z0-9_-]+$/.test(playlist.playlistId || '')) return null;
+  let thumbnail = '';
+  if (typeof playlist.playlistThumbnail === 'string') {
+    try {
+      const url = new URL(playlist.playlistThumbnail, invidiousOrigin);
+      if (url.protocol === 'https:' && url.origin === invidiousOrigin.origin) thumbnail = url.toString();
+    } catch {}
+  }
+  return {
+    playlistId: playlist.playlistId,
+    title: typeof playlist.title === 'string' ? playlist.title : 'Untitled playlist',
+    author: typeof playlist.author === 'string' ? playlist.author : 'Unknown channel',
+    videoCount: Number.isFinite(Number(playlist.videoCount)) ? Number(playlist.videoCount) : 0,
+    thumbnail,
+  };
+}
+
 const httpServer = createServer(async (request, response) => {
   try {
     const requestUrl = new URL(request.url, 'http://localhost');
     if (request.method === 'GET' && requestUrl.pathname === '/api/videos') {
       const mode = requestUrl.searchParams.get('mode') || 'trending';
-      let path;
+      let videos;
+      let playlists = [];
       if (mode === 'search') {
         const query = (requestUrl.searchParams.get('q') || '').trim();
         if (!query || query.length > 160) throw createError('Enter a search under 160 characters.');
@@ -279,16 +359,40 @@ const httpServer = createServer(async (request, response) => {
         if (!/^\d+$/.test(pageValue) || !Number.isSafeInteger(page) || page < 1 || page > 1000) {
           throw createError('Choose a valid search results page.');
         }
-        path = `/search?q=${encodeURIComponent(query)}&page=${page}`;
+        const results = await fetchInvidiousJson(
+          `/api/v1/search?q=${encodeURIComponent(query)}&type=all&page=${page}`,
+        );
+        if (!Array.isArray(results)) throw createError('The Invidious instance returned an invalid catalog response.', 502);
+        videos = [];
+        for (const result of results) {
+          if (!result || typeof result !== 'object') continue;
+          if (result.type === 'playlist') {
+            const playlist = mapInvidiousPlaylist(result);
+            if (playlist) playlists.push(playlist);
+          } else if (result.type === 'video' || result.videoId) {
+            const video = mapInvidiousVideo(result);
+            if (video) videos.push(video);
+          }
+        }
+        videos = videos.slice(0, 32);
+        playlists = playlists.slice(0, 32);
       } else if (mode === 'trending') {
         const region = requestUrl.searchParams.get('region') || 'US';
         if (!/^[A-Z]{2}$/.test(region)) throw createError('Choose a valid two-letter region.');
-        path = `/feed/trending?region=${encodeURIComponent(region)}`;
+        videos = await fetchInvidiousVideos(`/feed/trending?region=${encodeURIComponent(region)}`);
       } else {
         throw createError('Choose search or trending.', 400);
       }
-      const videos = await fetchInvidiousVideos(path);
-      return sendJson(response, 200, { mode, videos, instance: invidiousOrigin.host });
+      return sendJson(response, 200, { mode, videos, playlists, instance: invidiousOrigin.host });
+    }
+    const playlistMatch = requestUrl.pathname.match(/^\/api\/playlists\/([A-Za-z0-9_-]+)$/);
+    if (request.method === 'GET' && playlistMatch) {
+      const playlist = await fetchInvidiousJson(`/api/v1/playlists/${playlistMatch[1]}`);
+      if (!playlist || typeof playlist !== 'object' || !Array.isArray(playlist.videos)) {
+        throw createError('The Invidious instance returned an invalid playlist response.', 502);
+      }
+      const videos = playlist.videos.map(mapInvidiousVideo).filter(Boolean);
+      return sendJson(response, 200, { videos, instance: invidiousOrigin.host });
     }
     if (request.method === 'GET' && (request.url === '/' || request.url === '/index.html')) {
       response.writeHead(200, {

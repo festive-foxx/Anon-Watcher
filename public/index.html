@@ -30,7 +30,7 @@
         <div class="catalog-toolbar">
           <button class="browse-tab active" id="trending-tab" type="button">Trending</button>
           <form id="search-form" class="search-form" role="search">
-            <input id="search-query" type="search" placeholder="Search videos" aria-label="Search videos" autocomplete="off">
+            <input id="search-query" type="search" placeholder="Search videos and playlists" aria-label="Search videos and playlists" autocomplete="off">
             <button type="submit" title="Search videos" aria-label="Search videos"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.3" stroke="currentColor" stroke-width="1.8"/><path d="m15.5 15.5 4.2 4.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
           </form>
           <label class="region-control" for="region-select">Region
@@ -71,14 +71,25 @@
             <button class="icon-button" id="clear-button" type="button" title="Clear video" aria-label="Clear video"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
           </div>
         </div>
+        <section class="queue" aria-label="Playback queue">
+          <div class="queue-heading">
+            <div><p class="kicker">UP NEXT</p><h3>Queue <span id="queue-count">0</span></h3></div>
+            <div class="queue-actions">
+              <button class="queue-clear" id="queue-play-next" type="button" disabled>Play next</button>
+              <button class="queue-clear" id="queue-clear" type="button" disabled>Clear queue</button>
+            </div>
+          </div>
+          <p class="queue-empty" id="queue-empty">Add videos or playlists from search results.</p>
+          <ol class="queue-list" id="queue-list"></ol>
+        </section>
         <p class="message" id="message" role="status" aria-live="polite"></p>
       </section>
 
       <section class="details" aria-label="About privacy">
         <div class="detail-block">
           <span class="detail-index">01 / DISCOVER</span>
-          <h2>Search and trending</h2>
-          <p>Video listings come from a public Invidious instance. Search terms are sent to that instance, and thumbnails may load from its servers or YouTube.</p>
+          <h2>Search, playlists, and queue</h2>
+          <p>Video and playlist listings come from a public Invidious instance. Search terms are sent to that instance, and thumbnails may load from its servers or YouTube. Your queue stays in this page and is not saved.</p>
         </div>
         <div class="detail-block">
           <span class="detail-index">02 / PLAYER</span>
@@ -93,7 +104,7 @@
       </section>
     </main>
 
-    <footer><span>ANON WATCHER</span><span>SEARCH · TRENDING · PRIVACY-ENHANCED PLAYER</span></footer>
+    <footer><span>ANON WATCHER</span><span>SEARCH · PLAYLISTS · QUEUE · PRIVACY-ENHANCED PLAYER</span></footer>
   </div>
   <script src="app.js" defer></script>
 </body>
