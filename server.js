@@ -414,7 +414,7 @@ const httpServer = createServer(async (request, response) => {
     if (request.method === 'GET' && (request.url === '/' || request.url === '/index.html')) {
       response.writeHead(200, {
         'content-type': 'text/html; charset=utf-8',
-        'content-security-policy': `default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; img-src 'self' ${invidiousOrigin.origin}; frame-src https://www.youtube-nocookie.com ${invidiousOrigin.origin}; frame-ancestors 'none'`,
+        'content-security-policy': `default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self' https://api.invidious.io; img-src 'self' ${invidiousOrigin.origin}; frame-src https:; frame-ancestors 'none'`,
         'x-content-type-options': 'nosniff',
         'cache-control': 'no-store',
       });

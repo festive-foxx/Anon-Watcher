@@ -1,6 +1,10 @@
 const form = document.querySelector('#watch-form');
 const input = document.querySelector('#video-link');
 const invidiousPlayerOption = document.querySelector('#invidious-player-option');
+const instancePicker = document.querySelector('#instance-picker');
+const playerInstanceSelect = document.querySelector('#player-instance');
+const nextInstanceButton = document.querySelector('#next-instance-button');
+const instanceStatus = document.querySelector('#instance-status');
 const player = document.querySelector('#video-player');
 const emptyPlayer = document.querySelector('#empty-player');
 const playerBar = document.querySelector('#player-bar');
@@ -34,12 +38,14 @@ let currentPage = 1;
 let catalogRequestId = 0;
 let playbackRequestId = 0;
 let currentPlayerOrigin = '';
+let playerInstanceChosen = false;
 const playbackQueue = [];
-let availableInstances;
+let directoryInstances;
+let playerInstances;
 
-function getAvailableInstances() {
-  if (!availableInstances) {
-    availableInstances = fetch(instanceDirectoryUrl, {
+function getDirectoryInstances() {
+  if (!directoryInstances) {
+    directoryInstances = fetch(instanceDirectoryUrl, {
       headers: { accept: 'application/json' },
       signal: AbortSignal.timeout(8000),
     }).then(async (response) => {
@@ -47,26 +53,107 @@ function getAvailableInstances() {
       const entries = await response.json();
       return entries
         .map(([, details]) => details)
-        .filter((details) => details?.api && details.cors && details.type === 'https'
-          && details.monitor?.down === false)
+        .filter((details) => details?.type === 'https' && details.monitor?.down === false)
         .map((details) => {
           try {
             const url = new URL(details.uri);
             if (url.protocol !== 'https:' || url.username || url.password
               || (url.port && url.port !== '443') || url.pathname !== '/') return null;
-            return url;
+            return {
+              url,
+              origin: url.origin,
+              host: url.host,
+              api: details.api,
+              cors: details.cors,
+            };
           } catch {
             return null;
           }
         })
-        .filter(Boolean)
-        .slice(0, 8);
+        .filter(Boolean);
     }).catch((error) => {
-      availableInstances = undefined;
+      directoryInstances = undefined;
       throw error;
     });
   }
-  return availableInstances;
+  return directoryInstances;
+}
+
+async function getCatalogInstances() {
+  return (await getDirectoryInstances())
+    .filter((instance) => instance.api && instance.cors)
+    .map((instance) => instance.url);
+}
+
+async function getPlayerInstances() {
+  if (!playerInstances) {
+    playerInstances = (async () => {
+      let instances = [];
+      let directoryError;
+      try {
+        instances = await getDirectoryInstances();
+      } catch (error) {
+        directoryError = error;
+      }
+
+      if (!isGitHubPages) {
+        const response = await fetch('/api/config');
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Could not load the Invidious player configuration.');
+        const configuredOrigin = new URL(result.playerOrigin);
+        if (configuredOrigin.protocol !== 'https:' || configuredOrigin.username || configuredOrigin.password
+          || configuredOrigin.pathname !== '/') {
+          throw new Error('The server returned an invalid Invidious player origin.');
+        }
+        if (!instances.some((instance) => instance.origin === configuredOrigin.origin)) {
+          instances.unshift({ origin: configuredOrigin.origin, host: configuredOrigin.host });
+        }
+      } else if (directoryError) {
+        throw directoryError;
+      }
+
+      if (!instances.length) throw new Error('No HTTPS Invidious instances are currently available.');
+      if (directoryError) {
+        instanceStatus.textContent = `Instance directory unavailable; using the configured instance. ${directoryError.message}`;
+      }
+      return instances;
+    })().catch((error) => {
+      playerInstances = undefined;
+      throw error;
+    });
+  }
+  return playerInstances;
+}
+
+function updatePlayerInstanceOptions(instances, preferredOrigin = '') {
+  const previousOrigin = currentPlayerOrigin;
+  const selectedOrigin = playerInstanceChosen
+    ? previousOrigin
+    : preferredOrigin || previousOrigin || instances[0]?.origin || '';
+  playerInstanceSelect.replaceChildren();
+  for (const instance of instances) {
+    const option = document.createElement('option');
+    option.value = instance.origin;
+    option.textContent = instance.host;
+    playerInstanceSelect.append(option);
+  }
+  playerInstanceSelect.disabled = instances.length === 0;
+  if (instances.some((instance) => instance.origin === selectedOrigin)) {
+    currentPlayerOrigin = selectedOrigin;
+  } else {
+    currentPlayerOrigin = instances[0]?.origin || '';
+  }
+  playerInstanceSelect.value = currentPlayerOrigin;
+  nextInstanceButton.disabled = instances.length < 2;
+  if (!instanceStatus.textContent.startsWith('Instance directory unavailable')) {
+    instanceStatus.textContent = `${instances.length} monitored HTTPS instances available.`;
+  }
+}
+
+async function ensurePlayerInstances(preferredOrigin = '') {
+  const instances = await getPlayerInstances();
+  updatePlayerInstanceOptions(instances, preferredOrigin);
+  return instances;
 }
 
 function formatDuration(seconds) {
@@ -135,7 +222,7 @@ function mapApiPlaylist(playlist, instanceUrl) {
 }
 
 async function loadPagesCatalog(mode, query, page = 1, searchType = 'all') {
-  const instances = await getAvailableInstances();
+  const instances = await getCatalogInstances();
   if (!instances.length) throw new Error('No CORS-enabled Invidious instances are currently available.');
 
   let lastError;
@@ -186,7 +273,7 @@ async function loadPagesCatalog(mode, query, page = 1, searchType = 'all') {
 }
 
 async function loadPagesPlaylist(playlistId) {
-  const instances = await getAvailableInstances();
+  const instances = await getCatalogInstances();
   if (!instances.length) throw new Error('No CORS-enabled Invidious instances are currently available.');
 
   let lastError;
@@ -224,20 +311,11 @@ async function loadServerPlaylist(playlistId) {
 }
 
 async function getInvidiousPlayerOrigin() {
-  if (currentPlayerOrigin) return currentPlayerOrigin;
-  if (isGitHubPages) {
-    const instances = await getAvailableInstances();
-    if (!instances.length) throw new Error('No Invidious instances are currently available.');
-    currentPlayerOrigin = instances[0].origin;
-  } else {
-    const response = await fetch('/api/config');
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.error || 'Could not load the Invidious player configuration.');
-    const origin = new URL(result.playerOrigin);
-    if (origin.protocol !== 'https:' || origin.username || origin.password || origin.pathname !== '/') {
-      throw new Error('The server returned an invalid Invidious player origin.');
-    }
-    currentPlayerOrigin = origin.origin;
+  try {
+    await ensurePlayerInstances();
+  } catch (error) {
+    instanceStatus.textContent = error.message;
+    throw error;
   }
   return currentPlayerOrigin;
 }
@@ -562,7 +640,10 @@ async function loadCatalog(mode, query = '', page = 1, searchType = searchTypeFi
       if (!response.ok) throw new Error(result.error || 'Could not load videos.');
     }
     if (requestId !== catalogRequestId) return;
-    if (result.playerOrigin) currentPlayerOrigin = result.playerOrigin;
+    if (result.playerOrigin && !playerInstanceChosen) {
+      currentPlayerOrigin = result.playerOrigin;
+      if (playerInstances) updatePlayerInstanceOptions(await playerInstances, result.playerOrigin);
+    }
     const playlists = result.playlists || [];
     if (!result.videos.length && !playlists.length) {
       catalogStatus.textContent = page === 1 ? 'No results found' : `No more results · ${result.instance}`;
@@ -604,8 +685,25 @@ form.addEventListener('submit', async (event) => {
 });
 
 invidiousPlayerOption.addEventListener('change', () => {
+  instancePicker.hidden = !invidiousPlayerOption.checked;
   if (currentVideoId) showVideo(currentVideoId, false, currentPlaylistId);
   else if (currentPlaylistId) showPlaylist(currentPlaylistId, false);
+});
+
+playerInstanceSelect.addEventListener('change', () => {
+  currentPlayerOrigin = playerInstanceSelect.value;
+  playerInstanceChosen = true;
+  const instance = playerInstanceSelect.selectedOptions[0];
+  instanceStatus.textContent = `Using ${instance?.textContent || 'selected instance'}.`;
+  if (currentVideoId) showVideo(currentVideoId, false, currentPlaylistId);
+  else if (currentPlaylistId) showPlaylist(currentPlaylistId, false);
+});
+
+nextInstanceButton.addEventListener('click', () => {
+  if (playerInstanceSelect.options.length < 2) return;
+  const nextIndex = (playerInstanceSelect.selectedIndex + 1) % playerInstanceSelect.options.length;
+  playerInstanceSelect.selectedIndex = nextIndex;
+  playerInstanceSelect.dispatchEvent(new Event('change'));
 });
 
 shareButton.addEventListener('click', async () => {

@@ -65,6 +65,15 @@
             <span>Try ad-free playback via Invidious</span>
           </label>
           <p class="playback-hint">Uses a public Invidious instance instead of YouTube's player. Availability and ad-free playback are not guaranteed; the instance may receive your video request.</p>
+          <div class="instance-picker" id="instance-picker" hidden>
+            <label for="player-instance">Invidious instance</label>
+            <div class="instance-picker-row">
+              <select id="player-instance" aria-label="Invidious playback instance" disabled></select>
+              <button id="next-instance-button" type="button" disabled>Try another</button>
+            </div>
+            <p class="instance-status" id="instance-status" aria-live="polite">Loading available instances…</p>
+            <p class="playback-hint">If playback is refused, choose another instance. Browsers cannot reliably detect blocked video embeds.</p>
+          </div>
         </form>
 
         <div class="player-wrap" id="player-wrap">

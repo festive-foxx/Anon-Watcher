@@ -18,7 +18,7 @@ npm start
 
 Open `http://localhost:3000`. The server binds to `127.0.0.1` by default. Set `PORT` to change the port.
 
-The default catalog instance is `https://invidious.tiekoetter.com`. Set `INVIDIOUS_INSTANCE_URL` to another trusted HTTPS Invidious origin if needed. The adapter only requests that origin's generated search and trending paths; it does not fetch arbitrary URLs. Instance availability and rate limits can affect catalog results.
+The default catalog instance is `https://invidious.tiekoetter.com`. Set `INVIDIOUS_INSTANCE_URL` to another trusted HTTPS Invidious origin if needed. The adapter only requests that origin's generated search and trending paths; it does not fetch arbitrary URLs. Instance availability and rate limits can affect catalog results. For optional Invidious playback, the player can use the configured origin or another monitored HTTPS backend from the public instance directory.
 
 For shared deployment, put the service behind an access-controlled HTTPS reverse proxy and firewall.
 
@@ -26,6 +26,6 @@ For shared deployment, put the service behind an access-controlled HTTPS reverse
 
 The GitHub Pages version is a static site and does not run `server.js`. It discovers currently online, CORS-enabled HTTPS instances from the public Invidious instance directory, then calls their JSON API directly from the browser for search and trending. If an instance is unavailable, it tries another listed instance. Availability, CORS policy, and rate limits are outside this project's control.
 
-The Pages site retains the direct YouTube link/video ID player and privacy-enhanced YouTube embed, with the optional Invidious player available. Search queries go to the chosen Invidious instance; thumbnail and playback requests may go to Invidious and YouTube. This is not anonymity, and Pages does not provide a server-side proxy.
+The Pages site retains the direct YouTube link/video ID player and privacy-enhanced YouTube embed, with the optional Invidious player available. The instance picker lists monitored HTTPS backends and lets you retry playback on another one; this is manual because browsers cannot reliably detect a cross-origin embed refusing to load. Search queries go to a CORS-enabled Invidious instance; thumbnail and playback requests may go to Invidious and YouTube. Public backends can be unavailable or refuse specific videos. This is not anonymity, and Pages does not provide a server-side proxy.
 
 The workflow in `.github/workflows/pages.yml` publishes the `public/` directory to GitHub Pages on pushes to `main`. Enable GitHub Pages with **Build and deployment → Source: GitHub Actions** in the repository settings if it is not already enabled.
