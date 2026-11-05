@@ -1,6 +1,7 @@
 const form = document.querySelector('#watch-form');
 const input = document.querySelector('#video-link');
 const invidiousPlayerOption = document.querySelector('#invidious-player-option');
+const chooseBackendButton = document.querySelector('#choose-backend-button');
 const instancePicker = document.querySelector('#instance-picker');
 const playerInstanceSelect = document.querySelector('#player-instance');
 const nextInstanceButton = document.querySelector('#next-instance-button');
@@ -688,6 +689,19 @@ invidiousPlayerOption.addEventListener('change', () => {
   instancePicker.hidden = !invidiousPlayerOption.checked;
   if (currentVideoId) showVideo(currentVideoId, false, currentPlaylistId);
   else if (currentPlaylistId) showPlaylist(currentPlaylistId, false);
+});
+
+chooseBackendButton.addEventListener('click', async () => {
+  invidiousPlayerOption.checked = true;
+  instancePicker.hidden = false;
+  if (currentVideoId) showVideo(currentVideoId, false, currentPlaylistId);
+  else if (currentPlaylistId) showPlaylist(currentPlaylistId, false);
+  try {
+    await ensurePlayerInstances();
+    playerInstanceSelect.focus();
+  } catch (error) {
+    instanceStatus.textContent = error.message;
+  }
 });
 
 playerInstanceSelect.addEventListener('change', () => {
