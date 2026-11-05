@@ -75,11 +75,11 @@ button { font: inherit; }
 .form-hint { margin: 8px 0 0; color: var(--muted); font-size: 11px; }
 .watch-form .playback-option { display: flex; align-items: center; gap: 8px; margin: 13px 0 0; color: var(--ink); font: 11px 'DM Mono', 'Courier New', monospace; text-transform: none; cursor: pointer; }
 .playback-option input { width: 15px; height: 15px; margin: 0; accent-color: var(--blue); }
-.backend-select-button { margin: 10px 0 0 23px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 2px; background: white; color: var(--ink); font: 10px 'DM Mono', 'Courier New', monospace; cursor: pointer; }
-.backend-select-button:hover { border-color: var(--blue); color: var(--blue); }
-.playback-hint { margin: 5px 0 0 23px; color: var(--muted); font-size: 10px; line-height: 1.5; }
 .instance-picker { margin: 12px 0 0 23px; }
-.instance-picker[hidden] { display: none; }
+.instance-picker summary { width: fit-content; margin-bottom: 10px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 2px; background: white; color: var(--ink); font: 10px 'DM Mono', 'Courier New', monospace; cursor: pointer; list-style: none; }
+.instance-picker summary::-webkit-details-marker { display: none; }
+.instance-picker summary:hover { border-color: var(--blue); color: var(--blue); }
+.playback-hint { margin: 5px 0 0 23px; color: var(--muted); font-size: 10px; line-height: 1.5; }
 .watch-form .instance-picker label { margin-bottom: 6px; }
 .instance-picker-row { display: flex; gap: 8px; }
 .instance-picker-row select, .instance-picker-row button { min-height: 34px; border: 1px solid var(--line); border-radius: 2px; background: white; color: var(--ink); font: 11px 'DM Mono', 'Courier New', monospace; }
