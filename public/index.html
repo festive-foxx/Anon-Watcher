@@ -60,6 +60,11 @@
             <button class="watch-button" type="submit"><span>Watch</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
           </div>
           <p class="form-hint">YouTube video or playlist URLs, youtu.be, Shorts, live links, or an 11-character video ID.</p>
+          <label class="playback-option" for="invidious-player-option">
+            <input id="invidious-player-option" type="checkbox">
+            <span>Try ad-free playback via Invidious</span>
+          </label>
+          <p class="playback-hint">Uses a public Invidious instance instead of YouTube's player. Availability and ad-free playback are not guaranteed; the instance may receive your video request.</p>
         </form>
 
         <div class="player-wrap" id="player-wrap">
@@ -101,12 +106,12 @@
         <div class="detail-block">
           <span class="detail-index">02 / PLAYER</span>
           <h2>Keep the link flow</h2>
-          <p>Paste a YouTube video or playlist link, or a video ID. Playback uses the official <code>youtube-nocookie.com</code> embed.</p>
+          <p>Paste a YouTube video or playlist link, or a video ID. By default playback uses YouTube's privacy-enhanced embed; the optional Invidious player may avoid ads but depends on the selected instance.</p>
         </div>
         <div class="detail-block">
           <span class="detail-index">03 / PRIVACY</span>
           <h2>No local history</h2>
-          <p>Share links use <code>?yt=VIDEO_ID</code> or <code>?list=PLAYLIST_ID</code>. The selected Invidious instance receives search queries; YouTube receives playback requests. This is not anonymity.</p>
+          <p>Share links use <code>?yt=VIDEO_ID</code> or <code>?list=PLAYLIST_ID</code>. The selected Invidious instance receives search queries; playback goes to YouTube by default or to Invidious when selected. This is not anonymity.</p>
         </div>
       </section>
     </main>

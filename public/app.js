@@ -1,5 +1,6 @@
 const form = document.querySelector('#watch-form');
 const input = document.querySelector('#video-link');
+const invidiousPlayerOption = document.querySelector('#invidious-player-option');
 const player = document.querySelector('#video-player');
 const emptyPlayer = document.querySelector('#empty-player');
 const playerBar = document.querySelector('#player-bar');
@@ -31,6 +32,8 @@ let currentQuery = '';
 let currentSearchType = 'all';
 let currentPage = 1;
 let catalogRequestId = 0;
+let playbackRequestId = 0;
+let currentPlayerOrigin = '';
 const playbackQueue = [];
 let availableInstances;
 
@@ -173,6 +176,7 @@ async function loadPagesCatalog(mode, query, page = 1, searchType = 'all') {
         videos: videos.slice(0, 32),
         playlists: playlists.slice(0, 32),
         instance: instanceUrl.host,
+        playerOrigin: instanceUrl.origin,
       };
     } catch (error) {
       lastError = error;
@@ -202,6 +206,7 @@ async function loadPagesPlaylist(playlistId) {
       return {
         videos: playlist.videos.map((video) => mapApiVideo(video, instanceUrl)).filter(Boolean),
         instance: instanceUrl.host,
+        playerOrigin: instanceUrl.origin,
       };
     } catch (error) {
       lastError = error;
@@ -216,6 +221,33 @@ async function loadServerPlaylist(playlistId) {
   if (!response.ok) throw new Error(result.error || 'Could not load this playlist.');
   if (!Array.isArray(result.videos)) throw new Error('The server returned an invalid playlist response.');
   return result;
+}
+
+async function getInvidiousPlayerOrigin() {
+  if (currentPlayerOrigin) return currentPlayerOrigin;
+  if (isGitHubPages) {
+    const instances = await getAvailableInstances();
+    if (!instances.length) throw new Error('No Invidious instances are currently available.');
+    currentPlayerOrigin = instances[0].origin;
+  } else {
+    const response = await fetch('/api/config');
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Could not load the Invidious player configuration.');
+    const origin = new URL(result.playerOrigin);
+    if (origin.protocol !== 'https:' || origin.username || origin.password || origin.pathname !== '/') {
+      throw new Error('The server returned an invalid Invidious player origin.');
+    }
+    currentPlayerOrigin = origin.origin;
+  }
+  return currentPlayerOrigin;
+}
+
+async function getPlayerUrl(path, parameters) {
+  if (!invidiousPlayerOption.checked) {
+    return `https://www.youtube-nocookie.com/embed/${path}?${parameters}`;
+  }
+  const origin = await getInvidiousPlayerOrigin();
+  return `${origin}/embed/${path}?${parameters}`;
 }
 
 function extractYouTubeTarget(value) {
@@ -256,17 +288,24 @@ function extractYouTubeTarget(value) {
   return { videoId, playlistId };
 }
 
-function showVideo(videoId, updateAddress = true, playlistId = '') {
+async function showVideo(videoId, updateAddress = true, playlistId = '') {
   currentVideoId = videoId;
   currentPlaylistId = playlistId;
   const parameters = new URLSearchParams({ rel: '0', playsinline: '1' });
   if (playlistId) parameters.set('list', playlistId);
-  player.src = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(videoId)}?${parameters}`;
-  player.hidden = false;
-  emptyPlayer.hidden = true;
-  playerBar.hidden = false;
-  shareButton.disabled = false;
+  const requestId = ++playbackRequestId;
   message.textContent = '';
+  try {
+    const source = await getPlayerUrl(encodeURIComponent(videoId), parameters);
+    if (requestId !== playbackRequestId) return;
+    player.src = source;
+    player.hidden = false;
+    emptyPlayer.hidden = true;
+    playerBar.hidden = false;
+    shareButton.disabled = false;
+  } catch (error) {
+    if (requestId === playbackRequestId) message.textContent = `Could not load the selected player: ${error.message}`;
+  }
   if (updateAddress) {
     const shareUrl = new URL(window.location.href);
     shareUrl.search = '';
@@ -276,15 +315,23 @@ function showVideo(videoId, updateAddress = true, playlistId = '') {
   }
 }
 
-function showPlaylist(playlistId, updateAddress = true) {
+async function showPlaylist(playlistId, updateAddress = true) {
   currentVideoId = '';
   currentPlaylistId = playlistId;
-  player.src = `https://www.youtube-nocookie.com/embed/videoseries?list=${encodeURIComponent(playlistId)}&rel=0&playsinline=1`;
-  player.hidden = false;
-  emptyPlayer.hidden = true;
-  playerBar.hidden = false;
-  shareButton.disabled = false;
+  const parameters = new URLSearchParams({ list: playlistId, rel: '0', playsinline: '1' });
+  const requestId = ++playbackRequestId;
   message.textContent = '';
+  try {
+    const source = await getPlayerUrl('videoseries', parameters);
+    if (requestId !== playbackRequestId) return;
+    player.src = source;
+    player.hidden = false;
+    emptyPlayer.hidden = true;
+    playerBar.hidden = false;
+    shareButton.disabled = false;
+  } catch (error) {
+    if (requestId === playbackRequestId) message.textContent = `Could not load the selected player: ${error.message}`;
+  }
   if (updateAddress) {
     const shareUrl = new URL(window.location.href);
     shareUrl.search = '';
@@ -294,6 +341,7 @@ function showPlaylist(playlistId, updateAddress = true) {
 }
 
 function clearVideo(updateAddress = true) {
+  playbackRequestId += 1;
   currentVideoId = '';
   currentPlaylistId = '';
   player.src = 'about:blank';
@@ -467,15 +515,15 @@ function addToQueue(video) {
   renderQueue();
 }
 
-function openVideo(videoId) {
+async function openVideo(videoId) {
   input.value = videoId;
-  showVideo(videoId);
+  await showVideo(videoId);
   document.querySelector('#watcher').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-function openPlaylist(playlistId) {
+async function openPlaylist(playlistId) {
   input.value = `https://www.youtube.com/playlist?list=${playlistId}`;
-  showPlaylist(playlistId);
+  await showPlaylist(playlistId);
   document.querySelector('#watcher').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
@@ -514,6 +562,7 @@ async function loadCatalog(mode, query = '', page = 1, searchType = searchTypeFi
       if (!response.ok) throw new Error(result.error || 'Could not load videos.');
     }
     if (requestId !== catalogRequestId) return;
+    if (result.playerOrigin) currentPlayerOrigin = result.playerOrigin;
     const playlists = result.playlists || [];
     if (!result.videos.length && !playlists.length) {
       catalogStatus.textContent = page === 1 ? 'No results found' : `No more results · ${result.instance}`;
@@ -542,16 +591,21 @@ async function loadCatalog(mode, query = '', page = 1, searchType = searchTypeFi
   }
 }
 
-form.addEventListener('submit', (event) => {
+form.addEventListener('submit', async (event) => {
   event.preventDefault();
   try {
     const target = extractYouTubeTarget(input.value);
-    if (target.playlistId && !target.videoId) showPlaylist(target.playlistId);
-    else showVideo(target.videoId, true, target.playlistId);
+    if (target.playlistId && !target.videoId) await showPlaylist(target.playlistId);
+    else await showVideo(target.videoId, true, target.playlistId);
   } catch (error) {
     message.textContent = error.message;
     input.focus();
   }
+});
+
+invidiousPlayerOption.addEventListener('change', () => {
+  if (currentVideoId) showVideo(currentVideoId, false, currentPlaylistId);
+  else if (currentPlaylistId) showPlaylist(currentPlaylistId, false);
 });
 
 shareButton.addEventListener('click', async () => {

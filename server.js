@@ -387,7 +387,16 @@ const httpServer = createServer(async (request, response) => {
       } else {
         throw createError('Choose search or trending.', 400);
       }
-      return sendJson(response, 200, { mode, videos, playlists, instance: invidiousOrigin.host });
+      return sendJson(response, 200, {
+        mode,
+        videos,
+        playlists,
+        instance: invidiousOrigin.host,
+        playerOrigin: invidiousOrigin.origin,
+      });
+    }
+    if (request.method === 'GET' && requestUrl.pathname === '/api/config') {
+      return sendJson(response, 200, { playerOrigin: invidiousOrigin.origin });
     }
     const playlistMatch = requestUrl.pathname.match(/^\/api\/playlists\/([A-Za-z0-9_-]+)$/);
     if (request.method === 'GET' && playlistMatch) {
@@ -396,12 +405,16 @@ const httpServer = createServer(async (request, response) => {
         throw createError('The Invidious instance returned an invalid playlist response.', 502);
       }
       const videos = playlist.videos.map(mapInvidiousVideo).filter(Boolean);
-      return sendJson(response, 200, { videos, instance: invidiousOrigin.host });
+      return sendJson(response, 200, {
+        videos,
+        instance: invidiousOrigin.host,
+        playerOrigin: invidiousOrigin.origin,
+      });
     }
     if (request.method === 'GET' && (request.url === '/' || request.url === '/index.html')) {
       response.writeHead(200, {
         'content-type': 'text/html; charset=utf-8',
-        'content-security-policy': `default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; img-src 'self' ${invidiousOrigin.origin}; frame-src https://www.youtube-nocookie.com; frame-ancestors 'none'`,
+        'content-security-policy': `default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; img-src 'self' ${invidiousOrigin.origin}; frame-src https://www.youtube-nocookie.com ${invidiousOrigin.origin}; frame-ancestors 'none'`,
         'x-content-type-options': 'nosniff',
         'cache-control': 'no-store',
       });
