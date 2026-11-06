@@ -225,14 +225,23 @@ function sendJson(response, status, body) {
 
 async function fetchApiJson(url, headers, serviceName) {
   let upstream;
-  try {
-    upstream = await fetch(url, {
-      headers,
-      redirect: 'error',
-      signal: AbortSignal.timeout(requestTimeoutMs),
-    });
-  } catch {
-    throw createError(`The ${serviceName} service could not be reached.`, 502);
+  let fetchError;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      upstream = await fetch(url, {
+        headers,
+        redirect: 'error',
+        signal: AbortSignal.timeout(requestTimeoutMs),
+      });
+      break;
+    } catch (error) {
+      fetchError = error;
+      if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 300));
+    }
+  }
+  if (!upstream) {
+    console.error(`Unable to reach ${serviceName} at ${url.host}: ${fetchError?.cause?.code || fetchError?.name || 'network error'}`);
+    throw createError(`The ${serviceName} service at ${url.host} could not be reached after retrying.`, 502);
   }
   const body = await upstream.text();
   if (body.length > 6 * 1024 * 1024) throw createError(`The ${serviceName} response is too large.`, 502);
