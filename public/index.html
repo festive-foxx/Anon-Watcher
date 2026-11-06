@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f3f2ec">
-  <meta name="description" content="Watch direct video links in Anon Watcher's custom HTML5 player.">
-  <title>Anon Watcher | Your video, your player</title>
+  <meta name="description" content="Search YouTube and watch videos in Anon Watcher's custom HTML5 player.">
+  <title>Anon Watcher | Search and watch</title>
   <link rel="canonical" href="https://festive-foxx.github.io/Anon-Watcher/">
   <link rel="stylesheet" href="app.css">
 </head>
@@ -16,14 +16,32 @@
         <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M5 4.8c0-.8.9-1.3 1.6-.9l13 7.2a1 1 0 0 1 0 1.8l-13 7.2c-.7.4-1.6-.1-1.6-.9V4.8Z" fill="currentColor"/></svg></span>
         <span>anon watcher</span>
       </a>
-      <div class="top-note"><span class="live-dot"></span> CUSTOM HTML5 PLAYER</div>
+      <div class="top-note"><span class="live-dot"></span> SEARCH · CUSTOM PLAYER</div>
     </header>
 
     <main>
       <section class="intro">
-        <p class="kicker">Your video, your player</p>
-        <h1>Bring a link.<br>Press play.</h1>
-        <p class="lede">Play direct video URLs with a lightweight player built into Anon Watcher. No embedded video player or account required.</p>
+        <p class="kicker">Find something to watch</p>
+        <h1>Search it.<br>Watch it here.</h1>
+        <p class="lede">Search YouTube videos and playlists, then play available streams in Anon Watcher's own HTML5 player.</p>
+      </section>
+
+      <section class="search-panel" aria-label="Search YouTube">
+        <form id="search-form" class="search-form" role="search">
+          <label for="search-query">Search videos and playlists</label>
+          <div class="search-row">
+            <input id="search-query" type="search" placeholder="Search YouTube" autocomplete="off" required>
+            <select id="search-type" aria-label="Search type">
+              <option value="all">All</option>
+              <option value="video">Videos</option>
+              <option value="playlist">Playlists</option>
+            </select>
+            <button class="watch-button" type="submit">Search</button>
+          </div>
+        </form>
+        <div class="results-heading"><h2 id="results-title">Search results</h2><span id="search-status" aria-live="polite">Search for a video or playlist.</span></div>
+        <div class="video-grid" id="search-results" aria-live="polite"></div>
+        <button class="next-page-button" id="next-page-button" type="button" hidden>More results</button>
       </section>
 
       <section class="watcher" id="watcher" aria-label="Video player">
@@ -32,12 +50,12 @@
           <span>ANON WATCHER PLAYER</span>
         </div>
         <form id="watch-form" class="watch-form">
-          <label for="video-link">Direct video URL</label>
+          <label for="video-link">Or paste a direct media URL</label>
           <div class="input-row">
             <input id="video-link" name="video" type="url" placeholder="https://example.com/video.mp4" autocomplete="off" autocapitalize="off" spellcheck="false" required>
             <button class="watch-button" type="submit"><span>Watch</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
           </div>
-          <p class="form-hint">Use a direct HTTPS link to a video file or stream. YouTube watch links and video IDs are not direct media URLs. HLS playback depends on browser support.</p>
+          <p class="form-hint">This field accepts a direct media URL. YouTube search results are resolved automatically when a playable stream is available. HLS playback depends on browser support.</p>
         </form>
 
         <div class="player-wrap" id="player-wrap" tabindex="0" aria-label="Video player. Keyboard: Space to play or pause, arrow keys to seek or change volume, M to mute, F for fullscreen.">
@@ -86,7 +104,7 @@
         <div class="detail-block">
           <span class="detail-index">01 / SOURCES</span>
           <h2>Direct media only</h2>
-          <p>Paste a direct link to a media file or stream. A YouTube watch page or video ID is not a media URL; this player does not search for or extract YouTube streams.</p>
+          <p>Search uses the YouTube Data API through the Anon Watcher server. A server-side API key is required. Search results can include videos and playlists.</p>
         </div>
         <div class="detail-block">
           <span class="detail-index">02 / CONTROLS</span>
@@ -96,12 +114,12 @@
         <div class="detail-block">
           <span class="detail-index">03 / PRIVACY</span>
           <h2>No local history</h2>
-          <p>Playback happens directly from the media host you enter. Share links include the full media URL, including any query parameters; do not share private or temporary links.</p>
+          <p>Video stream URLs are requested from the configured Invidious-compatible instance and played directly by your browser. Availability and compatibility depend on that instance and the video.</p>
         </div>
       </section>
     </main>
 
-    <footer><span>ANON WATCHER</span><span>DIRECT MEDIA · CUSTOM PLAYER · NO WATCH HISTORY</span></footer>
+    <footer><span>ANON WATCHER</span><span>YOUTUBE SEARCH · PLAYLISTS · CUSTOM PLAYER</span></footer>
   </div>
   <script src="app.js" defer></script>
 </body>

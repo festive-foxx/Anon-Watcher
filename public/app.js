@@ -1,5 +1,12 @@
 const form = document.querySelector('#watch-form');
 const input = document.querySelector('#video-link');
+const searchForm = document.querySelector('#search-form');
+const searchInput = document.querySelector('#search-query');
+const searchType = document.querySelector('#search-type');
+const searchStatus = document.querySelector('#search-status');
+const resultsTitle = document.querySelector('#results-title');
+const searchResults = document.querySelector('#search-results');
+const nextPageButton = document.querySelector('#next-page-button');
 const player = document.querySelector('#media-player');
 const playerWrap = document.querySelector('#player-wrap');
 const emptyPlayer = document.querySelector('#empty-player');
@@ -23,6 +30,14 @@ const shareButton = document.querySelector('#share-button');
 const clearButton = document.querySelector('#clear-button');
 const message = document.querySelector('#message');
 let currentMediaUrl = '';
+let currentVideoId = '';
+let searchRequestId = 0;
+let playbackRequestId = 0;
+let nextPageToken = '';
+let resultMode = 'search';
+let resultQuery = '';
+let resultType = 'all';
+let resultPlaylistId = '';
 
 function formatTime(seconds) {
   if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
@@ -50,9 +65,161 @@ function parseMediaUrl(value) {
   }
   if (['youtube.com', 'www.youtube.com', 'm.youtube.com', 'youtu.be'].includes(url.hostname)
     && (url.pathname === '/watch' || url.hostname === 'youtu.be' || /^\/(?:shorts|live|embed)\//.test(url.pathname))) {
-    throw new Error('That is a YouTube watch link, not a direct media URL. This player does not extract YouTube streams.');
+    throw new Error('Choose a video from search or paste a direct media URL.');
   }
   return url;
+}
+
+async function requestJson(path) {
+  const response = await fetch(path, { headers: { accept: 'application/json' } });
+  let result;
+  try {
+    result = await response.json();
+  } catch {
+    if (window.location.hostname === 'festive-foxx.github.io') {
+      throw new Error('YouTube search and stream lookup require the Anon Watcher server; GitHub Pages is static.');
+    }
+    throw new Error('The Anon Watcher server returned an invalid response.');
+  }
+  if (!response.ok) throw new Error(result.error || `The server returned HTTP ${response.status}.`);
+  return result;
+}
+
+function makeResultCard(item) {
+  const card = document.createElement('article');
+  card.className = 'search-card';
+  const openItem = item.kind === 'playlist'
+    ? () => browsePlaylist(item.id, item.title)
+    : () => playVideo(item.id, item.title);
+  const thumbnail = document.createElement('button');
+  thumbnail.className = 'result-thumb';
+  thumbnail.type = 'button';
+  thumbnail.setAttribute('aria-label', `${item.kind === 'playlist' ? 'Open playlist' : 'Watch'}: ${item.title}`);
+  if (item.thumbnail) {
+    const image = document.createElement('img');
+    image.src = item.thumbnail;
+    image.alt = '';
+    image.loading = 'lazy';
+    image.referrerPolicy = 'no-referrer';
+    image.addEventListener('error', () => image.remove(), { once: true });
+    thumbnail.append(image);
+  }
+  const kind = document.createElement('span');
+  kind.className = 'result-kind';
+  kind.textContent = item.kind;
+  thumbnail.append(kind);
+  thumbnail.addEventListener('click', openItem);
+
+  const title = document.createElement('button');
+  title.className = 'result-title';
+  title.type = 'button';
+  title.textContent = item.title;
+  title.addEventListener('click', openItem);
+  const author = document.createElement('p');
+  author.className = 'result-author';
+  author.textContent = item.author;
+  card.append(thumbnail, title, author);
+
+  if (item.kind === 'playlist') {
+    const action = document.createElement('button');
+    action.type = 'button';
+    action.className = 'result-action';
+    action.textContent = 'Browse playlist';
+    action.addEventListener('click', openItem);
+    card.append(action);
+  } else {
+    const action = document.createElement('button');
+    action.type = 'button';
+    action.className = 'result-action';
+    action.textContent = 'Watch video';
+    action.addEventListener('click', openItem);
+    card.append(action);
+  }
+  return card;
+}
+
+function renderResults(items, append) {
+  if (!append) searchResults.replaceChildren();
+  const fragment = document.createDocumentFragment();
+  for (const item of items) fragment.append(makeResultCard(item));
+  searchResults.append(fragment);
+}
+
+async function loadResultPage(pageToken = '', append = false) {
+  const requestId = ++searchRequestId;
+  nextPageButton.disabled = true;
+  searchStatus.textContent = 'Loading…';
+  if (!append) {
+    searchResults.replaceChildren();
+    nextPageButton.hidden = true;
+  }
+  const parameters = new URLSearchParams({ pageToken });
+  const endpoint = resultMode === 'playlist'
+    ? `/api/playlists/${encodeURIComponent(resultPlaylistId)}?${parameters}`
+    : (() => {
+      parameters.set('q', resultQuery);
+      parameters.set('type', resultType);
+      return `/api/search?${parameters}`;
+    })();
+
+  try {
+    const result = await requestJson(endpoint);
+    if (requestId !== searchRequestId) return;
+    renderResults(result.items, append);
+    nextPageToken = result.nextPageToken || '';
+    nextPageButton.hidden = !nextPageToken;
+    searchStatus.textContent = result.items.length
+      ? `${searchResults.children.length} result${searchResults.children.length === 1 ? '' : 's'}`
+      : 'No results found.';
+  } catch (error) {
+    if (requestId !== searchRequestId) return;
+    searchStatus.textContent = error.message;
+    nextPageButton.hidden = true;
+  } finally {
+    if (requestId === searchRequestId) nextPageButton.disabled = false;
+  }
+}
+
+function startSearch(query, type = searchType.value, updateAddress = true) {
+  const trimmed = query.trim();
+  if (!trimmed) {
+    searchInput.focus();
+    return;
+  }
+  if (trimmed.length > 160) {
+    searchStatus.textContent = 'Search terms must be 160 characters or fewer.';
+    return;
+  }
+  resultMode = 'search';
+  resultQuery = trimmed;
+  resultType = type;
+  resultPlaylistId = '';
+  resultsTitle.textContent = `Results for “${trimmed}”`;
+  searchInput.value = trimmed;
+  searchType.value = type;
+  loadResultPage();
+  if (updateAddress) {
+    const shareUrl = new URL(window.location.href);
+    shareUrl.search = '';
+    shareUrl.searchParams.set('q', trimmed);
+    if (type !== 'all') shareUrl.searchParams.set('type', type);
+    window.history.replaceState({}, '', shareUrl);
+  }
+}
+
+function browsePlaylist(playlistId, title, updateAddress = true) {
+  resultMode = 'playlist';
+  resultQuery = '';
+  resultPlaylistId = playlistId;
+  resultsTitle.textContent = title;
+  searchStatus.textContent = 'Loading playlist…';
+  loadResultPage();
+  if (updateAddress) {
+    const shareUrl = new URL(window.location.href);
+    shareUrl.search = '';
+    shareUrl.searchParams.set('list', playlistId);
+    window.history.replaceState({}, '', shareUrl);
+  }
 }
 
 function updatePlayButton() {
@@ -86,10 +253,11 @@ function updateFullscreenButton() {
   fullscreenButton.title = fullscreen ? 'Exit fullscreen' : 'Enter fullscreen';
 }
 
-function showMedia(url, updateAddress = true) {
+function showMedia(url, title, videoId = '', updateAddress = true) {
   currentMediaUrl = url.toString();
+  currentVideoId = videoId;
   input.value = currentMediaUrl;
-  videoLabel.textContent = url.pathname.split('/').filter(Boolean).pop() || url.hostname;
+  videoLabel.textContent = title || url.pathname.split('/').filter(Boolean).pop() || url.hostname;
   sourceLabel.textContent = url.hostname;
   message.textContent = '';
   emptyPlayer.hidden = true;
@@ -104,16 +272,38 @@ function showMedia(url, updateAddress = true) {
   if (updateAddress) {
     const shareUrl = new URL(window.location.href);
     shareUrl.search = '';
-    shareUrl.searchParams.set('video', currentMediaUrl);
+    if (videoId) shareUrl.searchParams.set('yt', videoId);
+    else shareUrl.searchParams.set('video', currentMediaUrl);
     window.history.replaceState({}, '', shareUrl);
   }
 }
 
+async function playVideo(videoId, title = '', updateAddress = true) {
+  const requestId = ++playbackRequestId;
+  message.textContent = 'Finding a playable stream…';
+  try {
+    const result = await requestJson(`/api/videos/${encodeURIComponent(videoId)}/stream`);
+    if (requestId !== playbackRequestId) return;
+    const url = parseMediaUrl(result.url);
+    showMedia(url, title || result.title || 'YouTube video', videoId, updateAddress);
+    try {
+      await player.play();
+    } catch {
+      message.textContent = 'Stream loaded. Press play to start.';
+    }
+    document.querySelector('#watcher').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (error) {
+    if (requestId === playbackRequestId) message.textContent = error.message;
+  }
+}
+
 function clearMedia(updateAddress = true) {
+  playbackRequestId += 1;
   player.pause();
   player.removeAttribute('src');
   player.load();
   currentMediaUrl = '';
+  currentVideoId = '';
   input.value = '';
   videoLabel.textContent = 'Open a video';
   sourceLabel.textContent = 'DIRECT MEDIA';
@@ -143,11 +333,23 @@ async function togglePlayback() {
 form.addEventListener('submit', (event) => {
   event.preventDefault();
   try {
-    showMedia(parseMediaUrl(input.value));
+    showMedia(parseMediaUrl(input.value), '');
+    player.play().catch(() => {
+      message.textContent = 'Media loaded. Press play to start.';
+    });
   } catch (error) {
     message.textContent = error.message;
     input.focus();
   }
+});
+
+searchForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  startSearch(searchInput.value, searchType.value);
+});
+nextPageButton.addEventListener('click', () => {
+  if (!nextPageToken || nextPageButton.disabled) return;
+  loadResultPage(nextPageToken, true);
 });
 
 playButton.addEventListener('click', togglePlayback);
@@ -222,10 +424,13 @@ shareButton.addEventListener('click', async () => {
   if (!currentMediaUrl) return;
   const shareUrl = new URL(window.location.href);
   shareUrl.search = '';
-  shareUrl.searchParams.set('video', currentMediaUrl);
+  if (currentVideoId) shareUrl.searchParams.set('yt', currentVideoId);
+  else shareUrl.searchParams.set('video', currentMediaUrl);
   try {
     await navigator.clipboard.writeText(shareUrl.toString());
-    message.textContent = 'Share link copied. It contains the full media URL.';
+    message.textContent = currentVideoId
+      ? 'Share link copied.'
+      : 'Share link copied. It contains the full media URL.';
   } catch (error) {
     message.textContent = `Could not copy the share link: ${error.message}`;
   }
@@ -233,15 +438,39 @@ shareButton.addEventListener('click', async () => {
 
 clearButton.addEventListener('click', () => clearMedia());
 
-const initialMedia = new URLSearchParams(window.location.search).get('video');
-if (initialMedia) {
+const parameters = new URLSearchParams(window.location.search);
+const initialVideo = parameters.get('yt');
+const initialMedia = parameters.get('video');
+const initialPlaylist = parameters.get('list');
+const initialQuery = parameters.get('q');
+if (initialVideo && /^[A-Za-z0-9_-]{11}$/.test(initialVideo)) {
+  playVideo(initialVideo, '', false);
+} else if (initialMedia) {
   input.value = initialMedia;
   try {
-    showMedia(parseMediaUrl(initialMedia), false);
+    showMedia(parseMediaUrl(initialMedia), '', '', false);
   } catch (error) {
     message.textContent = error.message;
   }
 }
+if (initialPlaylist && /^[A-Za-z0-9_-]{11,128}$/.test(initialPlaylist)) {
+  browsePlaylist(initialPlaylist, 'Playlist', false);
+} else if (initialQuery) {
+  const initialType = ['all', 'video', 'playlist'].includes(parameters.get('type'))
+    ? parameters.get('type')
+    : 'all';
+  startSearch(initialQuery, initialType, false);
+}
+
+requestJson('/api/config').then((config) => {
+  if (!config.searchConfigured && !initialQuery && !initialPlaylist) {
+    searchStatus.textContent = 'Set YOUTUBE_API_KEY on the server to enable YouTube search.';
+  }
+}).catch(() => {
+  if (window.location.hostname === 'festive-foxx.github.io') {
+    searchStatus.textContent = 'YouTube search requires the Anon Watcher server; GitHub Pages is static.';
+  }
+});
 
 updateVolume();
 updateFullscreenButton();

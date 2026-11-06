@@ -2,7 +2,7 @@
   "name": "Anon-Watcher",
   "version": "1.0.0",
   "private": true,
-  "description": "A custom HTML5 player for direct media URLs.",
+  "description": "YouTube search with a custom HTML5 video player.",
   "scripts": {
     "start": "node server.js"
   },

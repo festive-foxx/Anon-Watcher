@@ -8,6 +8,8 @@ const port = Number(process.env.PORT || 3000);
 const host = process.env.HOST || '127.0.0.1';
 const resolverName = process.env.ADULT_FILTER_NAME || 'Cloudflare Family';
 const resolverUrl = new URL(process.env.ADULT_FILTER_DOH_URL || 'https://family.cloudflare-dns.com/dns-query');
+const invidiousOrigin = new URL(process.env.INVIDIOUS_INSTANCE_URL || 'https://snopyta.org');
+const youtubeApiKey = process.env.YOUTUBE_API_KEY || '';
 const publicDir = resolve(__dirname, 'public');
 const maxResponseBytes = 2 * 1024 * 1024;
 const requestTimeoutMs = 12000;
@@ -15,6 +17,11 @@ const requestTimeoutMs = 12000;
 if (resolverUrl.protocol !== 'https:' || resolverUrl.username || resolverUrl.password) {
   throw new Error('ADULT_FILTER_DOH_URL must be an HTTPS URL without embedded credentials.');
 }
+if (invidiousOrigin.protocol !== 'https:' || invidiousOrigin.username || invidiousOrigin.password
+  || invidiousOrigin.pathname !== '/' || invidiousOrigin.search || invidiousOrigin.hash) {
+  throw new Error('INVIDIOUS_INSTANCE_URL must be an HTTPS origin without a path or credentials.');
+}
+
 function createError(message, status = 400) {
   const error = new Error(message);
   error.status = status;
@@ -211,13 +218,157 @@ function sendJson(response, status, body) {
   response.end(JSON.stringify(body));
 }
 
+async function fetchApiJson(url, headers, serviceName) {
+  let upstream;
+  try {
+    upstream = await fetch(url, {
+      headers,
+      redirect: 'error',
+      signal: AbortSignal.timeout(requestTimeoutMs),
+    });
+  } catch {
+    throw createError(`The ${serviceName} service could not be reached.`, 502);
+  }
+  const body = await upstream.text();
+  if (body.length > 6 * 1024 * 1024) throw createError(`The ${serviceName} response is too large.`, 502);
+  let result;
+  try {
+    result = JSON.parse(body);
+  } catch {
+    throw createError(`The ${serviceName} service returned an invalid response.`, 502);
+  }
+  if (!upstream.ok) {
+    const message = result.error?.message;
+    throw createError(
+      typeof message === 'string' ? message : `The ${serviceName} service returned HTTP ${upstream.status}.`,
+      502,
+    );
+  }
+  return result;
+}
+
+function youtubeApiUrl(resource, parameters) {
+  if (!youtubeApiKey) {
+    throw createError('YouTube search is not configured. Set YOUTUBE_API_KEY on the server.', 503);
+  }
+  const url = new URL(`https://www.googleapis.com/youtube/v3/${resource}`);
+  for (const [key, value] of Object.entries(parameters)) {
+    if (value) url.searchParams.set(key, value);
+  }
+  url.searchParams.set('key', youtubeApiKey);
+  return url;
+}
+
+function validatePageToken(value) {
+  if (value.length > 512 || /[\u0000-\u001f\u007f]/.test(value)) {
+    throw createError('Choose a valid results page.');
+  }
+  return value;
+}
+
+function youtubeSearchItem(item) {
+  const kind = item.id?.kind === 'youtube#playlist' ? 'playlist' : 'video';
+  const id = kind === 'playlist' ? item.id?.playlistId : item.id?.videoId;
+  const validId = kind === 'playlist'
+    ? /^[A-Za-z0-9_-]{11,128}$/.test(id || '')
+    : /^[A-Za-z0-9_-]{11}$/.test(id || '');
+  if (!validId) return null;
+  const thumbnails = item.snippet?.thumbnails || {};
+  const thumbnail = thumbnails.high?.url || thumbnails.medium?.url || thumbnails.default?.url || '';
+  return {
+    id,
+    kind,
+    title: typeof item.snippet?.title === 'string' ? item.snippet.title : 'Untitled',
+    author: typeof item.snippet?.channelTitle === 'string' ? item.snippet.channelTitle : '',
+    description: typeof item.snippet?.description === 'string' ? item.snippet.description : '',
+    thumbnail: /^https:\/\/(?:i\.ytimg\.com|yt3\.ggpht\.com)\//.test(thumbnail) ? thumbnail : '',
+  };
+}
+
 const httpServer = createServer(async (request, response) => {
   try {
     const requestUrl = new URL(request.url, 'http://localhost');
+    if (request.method === 'GET' && requestUrl.pathname === '/api/config') {
+      return sendJson(response, 200, { searchConfigured: Boolean(youtubeApiKey) });
+    }
+    if (request.method === 'GET' && requestUrl.pathname === '/api/search') {
+      const query = (requestUrl.searchParams.get('q') || '').trim();
+      if (!query || query.length > 160) throw createError('Enter a search under 160 characters.');
+      const type = requestUrl.searchParams.get('type') || 'all';
+      if (!['all', 'video', 'playlist'].includes(type)) {
+        throw createError('Choose all results, videos, or playlists.');
+      }
+      const pageToken = validatePageToken(requestUrl.searchParams.get('pageToken') || '');
+      const results = await fetchApiJson(youtubeApiUrl('search', {
+        part: 'snippet',
+        q: query,
+        type: type === 'all' ? 'video,playlist' : type,
+        maxResults: '20',
+        pageToken,
+      }), { accept: 'application/json' }, 'YouTube Data API');
+      if (!Array.isArray(results.items)) {
+        throw createError('YouTube returned an invalid search response.', 502);
+      }
+      return sendJson(response, 200, {
+        items: results.items.map(youtubeSearchItem).filter(Boolean),
+        nextPageToken: validatePageToken(results.nextPageToken || ''),
+      });
+    }
+    const playlistMatch = requestUrl.pathname.match(/^\/api\/playlists\/([A-Za-z0-9_-]{11,128})$/);
+    if (request.method === 'GET' && playlistMatch) {
+      const pageToken = validatePageToken(requestUrl.searchParams.get('pageToken') || '');
+      const results = await fetchApiJson(youtubeApiUrl('playlistItems', {
+        part: 'snippet,contentDetails',
+        playlistId: playlistMatch[1],
+        maxResults: '50',
+        pageToken,
+      }), { accept: 'application/json' }, 'YouTube Data API');
+      if (!Array.isArray(results.items)) {
+        throw createError('YouTube returned an invalid playlist response.', 502);
+      }
+      const items = results.items.map((item) => {
+        const videoId = item.contentDetails?.videoId || item.snippet?.resourceId?.videoId;
+        if (!/^[A-Za-z0-9_-]{11}$/.test(videoId || '')) return null;
+        return youtubeSearchItem({
+          id: { kind: 'youtube#video', videoId },
+          snippet: item.snippet,
+        });
+      }).filter(Boolean);
+      return sendJson(response, 200, {
+        items,
+        nextPageToken: validatePageToken(results.nextPageToken || ''),
+      });
+    }
+    const videoMatch = requestUrl.pathname.match(/^\/api\/videos\/([A-Za-z0-9_-]{11})\/stream$/);
+    if (request.method === 'GET' && videoMatch) {
+      const detailsUrl = new URL(`/api/v1/videos/${videoMatch[1]}`, invidiousOrigin);
+      const details = await fetchApiJson(detailsUrl, { accept: 'application/json' }, 'video stream');
+      if (!Array.isArray(details.formatStreams)) {
+        throw createError('The selected video has no direct streams available.', 404);
+      }
+      const streams = details.formatStreams.flatMap((stream) => {
+        if (!stream || typeof stream.url !== 'string'
+          || !(stream.type || '').toLowerCase().startsWith('video/mp4')) return [];
+        try {
+          const url = new URL(stream.url);
+          if (url.protocol !== 'https:' || url.username || url.password) return [];
+          const height = Number.parseInt(stream.qualityLabel || '', 10) || 0;
+          return [{ url: url.toString(), quality: stream.qualityLabel || '', height }];
+        } catch {
+          return [];
+        }
+      }).sort((a, b) => b.height - a.height);
+      if (!streams.length) throw createError('No browser-compatible MP4 stream is available for this video.', 404);
+      return sendJson(response, 200, {
+        url: streams[0].url,
+        quality: streams[0].quality,
+        title: typeof details.title === 'string' ? details.title : '',
+      });
+    }
     if (request.method === 'GET' && (request.url === '/' || request.url === '/index.html')) {
       response.writeHead(200, {
         'content-type': 'text/html; charset=utf-8',
-        'content-security-policy': "default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; media-src 'self' http: https: blob:; frame-src 'none'; frame-ancestors 'none'",
+        'content-security-policy': "default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; img-src 'self' https://i.ytimg.com https://yt3.ggpht.com; media-src 'self' https: blob:; frame-src 'none'; frame-ancestors 'none'",
         'x-content-type-options': 'nosniff',
         'cache-control': 'no-store',
       });
@@ -242,5 +393,5 @@ const httpServer = createServer(async (request, response) => {
 
 httpServer.listen(port, host, () => {
   console.log(`Anon Watcher is ready at http://${host}:${port}`);
-  console.log('Playback uses direct media URLs in the custom HTML5 player.');
+  console.log(`YouTube search ${youtubeApiKey ? 'is configured' : 'needs YOUTUBE_API_KEY'}; streams use ${invidiousOrigin.host}.`);
 });
