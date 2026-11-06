@@ -380,7 +380,7 @@ const httpServer = createServer(async (request, response) => {
         title: typeof details.title === 'string' ? details.title : '',
       });
     }
-    if (request.method === 'GET' && (request.url === '/' || request.url === '/index.html')) {
+    if (request.method === 'GET' && (requestUrl.pathname === '/' || requestUrl.pathname === '/index.html')) {
       response.writeHead(200, {
         'content-type': 'text/html; charset=utf-8',
         'content-security-policy': "default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self' https:; img-src 'self' https://i.ytimg.com https://yt3.ggpht.com; media-src 'self' https: blob:; frame-src 'none'; frame-ancestors 'none'",
@@ -401,8 +401,8 @@ const httpServer = createServer(async (request, response) => {
       });
       return response.end(await readFile(hlsJsPath));
     }
-    if (request.method === 'GET' && assets[request.url]) {
-      const [file, contentType] = assets[request.url];
+    if (request.method === 'GET' && assets[requestUrl.pathname]) {
+      const [file, contentType] = assets[requestUrl.pathname];
       response.writeHead(200, { 'content-type': contentType, 'x-content-type-options': 'nosniff' });
       return response.end(await readFile(resolve(publicDir, file)));
     }
