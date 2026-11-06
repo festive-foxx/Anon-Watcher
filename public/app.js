@@ -31,6 +31,7 @@ const clearButton = document.querySelector('#clear-button');
 const message = document.querySelector('#message');
 let currentMediaUrl = '';
 let currentVideoId = '';
+let hlsPlayer = null;
 let searchRequestId = 0;
 let playbackRequestId = 0;
 let nextPageToken = '';
@@ -253,7 +254,11 @@ function updateFullscreenButton() {
   fullscreenButton.title = fullscreen ? 'Exit fullscreen' : 'Enter fullscreen';
 }
 
-function showMedia(url, title, videoId = '', updateAddress = true) {
+function showMedia(url, title, videoId = '', updateAddress = true, mediaType = 'mp4') {
+  if (hlsPlayer) {
+    hlsPlayer.destroy();
+    hlsPlayer = null;
+  }
   currentMediaUrl = url.toString();
   currentVideoId = videoId;
   input.value = currentMediaUrl;
@@ -264,8 +269,25 @@ function showMedia(url, title, videoId = '', updateAddress = true) {
   customControls.hidden = false;
   playerBar.hidden = false;
   shareButton.disabled = false;
-  player.src = currentMediaUrl;
-  player.load();
+  if (mediaType === 'hls' && !player.canPlayType('application/vnd.apple.mpegurl')) {
+    if (!window.Hls || !window.Hls.isSupported()) {
+      throw new Error('This browser does not support HLS playback.');
+    }
+    hlsPlayer = new window.Hls();
+    const activeHlsPlayer = hlsPlayer;
+    activeHlsPlayer.on(window.Hls.Events.ERROR, (_event, data) => {
+      if (data.fatal && hlsPlayer === activeHlsPlayer) {
+        message.textContent = 'The HLS stream could not be loaded. Try another video or stream instance.';
+        activeHlsPlayer.destroy();
+        hlsPlayer = null;
+      }
+    });
+    activeHlsPlayer.loadSource(currentMediaUrl);
+    activeHlsPlayer.attachMedia(player);
+  } else {
+    player.src = currentMediaUrl;
+    player.load();
+  }
   updateTime();
   updatePlayButton();
 
@@ -285,7 +307,7 @@ async function playVideo(videoId, title = '', updateAddress = true) {
     const result = await requestJson(`/api/videos/${encodeURIComponent(videoId)}/stream`);
     if (requestId !== playbackRequestId) return;
     const url = parseMediaUrl(result.url);
-    showMedia(url, title || result.title || 'YouTube video', videoId, updateAddress);
+    showMedia(url, title || result.title || 'YouTube video', videoId, updateAddress, result.type);
     try {
       await player.play();
     } catch {
@@ -299,6 +321,10 @@ async function playVideo(videoId, title = '', updateAddress = true) {
 
 function clearMedia(updateAddress = true) {
   playbackRequestId += 1;
+  if (hlsPlayer) {
+    hlsPlayer.destroy();
+    hlsPlayer = null;
+  }
   player.pause();
   player.removeAttribute('src');
   player.load();

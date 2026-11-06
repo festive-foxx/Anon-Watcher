@@ -9,8 +9,10 @@ const host = process.env.HOST || '127.0.0.1';
 const resolverName = process.env.ADULT_FILTER_NAME || 'Cloudflare Family';
 const resolverUrl = new URL(process.env.ADULT_FILTER_DOH_URL || 'https://family.cloudflare-dns.com/dns-query');
 const invidiousOrigin = new URL(process.env.INVIDIOUS_INSTANCE_URL || 'https://yt.chocolatemoo53.com');
+const invidiousRegion = (process.env.INVIDIOUS_REGION || 'US').toUpperCase();
 const youtubeApiKey = process.env.YOUTUBE_API_KEY || '';
 const publicDir = resolve(__dirname, 'public');
+const hlsJsPath = require.resolve('hls.js/dist/hls.min.js');
 const maxResponseBytes = 2 * 1024 * 1024;
 const requestTimeoutMs = 12000;
 
@@ -20,6 +22,9 @@ if (resolverUrl.protocol !== 'https:' || resolverUrl.username || resolverUrl.pas
 if (invidiousOrigin.protocol !== 'https:' || invidiousOrigin.username || invidiousOrigin.password
   || invidiousOrigin.pathname !== '/' || invidiousOrigin.search || invidiousOrigin.hash) {
   throw new Error('INVIDIOUS_INSTANCE_URL must be an HTTPS origin without a path or credentials.');
+}
+if (!/^[A-Z]{2}$/.test(invidiousRegion)) {
+  throw new Error('INVIDIOUS_REGION must be a two-letter country code.');
 }
 
 function createError(message, status = 400) {
@@ -342,11 +347,9 @@ const httpServer = createServer(async (request, response) => {
     const videoMatch = requestUrl.pathname.match(/^\/api\/videos\/([A-Za-z0-9_-]{11})\/stream$/);
     if (request.method === 'GET' && videoMatch) {
       const detailsUrl = new URL(`/api/v1/videos/${videoMatch[1]}`, invidiousOrigin);
+      detailsUrl.searchParams.set('region', invidiousRegion);
       const details = await fetchApiJson(detailsUrl, { accept: 'application/json' }, 'video stream');
-      if (!Array.isArray(details.formatStreams)) {
-        throw createError('The selected video has no direct streams available.', 404);
-      }
-      const streams = details.formatStreams.flatMap((stream) => {
+      const streams = (Array.isArray(details.formatStreams) ? details.formatStreams : []).flatMap((stream) => {
         if (!stream || typeof stream.url !== 'string'
           || !(stream.type || '').toLowerCase().startsWith('video/mp4')) return [];
         try {
@@ -358,17 +361,29 @@ const httpServer = createServer(async (request, response) => {
           return [];
         }
       }).sort((a, b) => b.height - a.height);
-      if (!streams.length) throw createError('No browser-compatible MP4 stream is available for this video.', 404);
+      let stream;
+      if (streams.length) {
+        stream = { url: streams[0].url, type: 'mp4', quality: streams[0].quality };
+      } else {
+        try {
+          const hlsUrl = new URL(details.hlsUrl);
+          if (hlsUrl.protocol === 'https:' && !hlsUrl.username && !hlsUrl.password) {
+            stream = { url: hlsUrl.toString(), type: 'hls', quality: '' };
+          }
+        } catch {
+          throw createError('The selected video has no browser-compatible stream available.', 404);
+        }
+      }
+      if (!stream) throw createError('The selected video has no browser-compatible stream available.', 404);
       return sendJson(response, 200, {
-        url: streams[0].url,
-        quality: streams[0].quality,
+        ...stream,
         title: typeof details.title === 'string' ? details.title : '',
       });
     }
     if (request.method === 'GET' && (request.url === '/' || request.url === '/index.html')) {
       response.writeHead(200, {
         'content-type': 'text/html; charset=utf-8',
-        'content-security-policy': "default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; img-src 'self' https://i.ytimg.com https://yt3.ggpht.com; media-src 'self' https: blob:; frame-src 'none'; frame-ancestors 'none'",
+        'content-security-policy': "default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self' https:; img-src 'self' https://i.ytimg.com https://yt3.ggpht.com; media-src 'self' https: blob:; frame-src 'none'; frame-ancestors 'none'",
         'x-content-type-options': 'nosniff',
         'cache-control': 'no-store',
       });
@@ -378,6 +393,14 @@ const httpServer = createServer(async (request, response) => {
       '/app.css': ['app.css', 'text/css; charset=utf-8'],
       '/app.js': ['app.js', 'text/javascript; charset=utf-8'],
     };
+    if (request.method === 'GET' && requestUrl.pathname === '/vendor/hls.min.js') {
+      response.writeHead(200, {
+        'content-type': 'text/javascript; charset=utf-8',
+        'x-content-type-options': 'nosniff',
+        'cache-control': 'public, max-age=86400',
+      });
+      return response.end(await readFile(hlsJsPath));
+    }
     if (request.method === 'GET' && assets[request.url]) {
       const [file, contentType] = assets[request.url];
       response.writeHead(200, { 'content-type': contentType, 'x-content-type-options': 'nosniff' });
