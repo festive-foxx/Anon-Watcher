@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f3f2ec">
-  <meta name="description" content="Search and browse videos through Invidious, then watch in a focused privacy-enhanced player.">
-  <title>Anon Watcher | YouTube, on your terms</title>
+  <meta name="description" content="Watch direct video links in Anon Watcher's custom HTML5 player.">
+  <title>Anon Watcher | Your video, your player</title>
   <link rel="canonical" href="https://festive-foxx.github.io/Anon-Watcher/">
   <link rel="stylesheet" href="app.css">
 </head>
@@ -16,117 +16,92 @@
         <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M5 4.8c0-.8.9-1.3 1.6-.9l13 7.2a1 1 0 0 1 0 1.8l-13 7.2c-.7.4-1.6-.1-1.6-.9V4.8Z" fill="currentColor"/></svg></span>
         <span>anon watcher</span>
       </a>
-      <div class="top-note"><span class="live-dot"></span> INVIDIOUS-POWERED CATALOG</div>
+      <div class="top-note"><span class="live-dot"></span> CUSTOM HTML5 PLAYER</div>
     </header>
 
     <main>
       <section class="intro">
-        <p class="kicker">Independent video browsing</p>
-        <h1>Find it.<br>Watch it here.</h1>
-        <p class="lede">Search and browse through an Invidious instance, then watch in a focused privacy-enhanced player.</p>
+        <p class="kicker">Your video, your player</p>
+        <h1>Bring a link.<br>Press play.</h1>
+        <p class="lede">Play direct video URLs with a lightweight player built into Anon Watcher. No embedded video player or account required.</p>
       </section>
 
-      <section class="catalog" aria-label="Browse YouTube videos">
-        <div class="catalog-toolbar">
-          <button class="browse-tab active" id="trending-tab" type="button">Trending</button>
-          <form id="search-form" class="search-form" role="search">
-            <input id="search-query" type="search" placeholder="Search videos and playlists" aria-label="Search videos and playlists" autocomplete="off">
-            <button type="submit" title="Search videos" aria-label="Search videos"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.3" stroke="currentColor" stroke-width="1.8"/><path d="m15.5 15.5 4.2 4.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
-          </form>
-          <label class="search-type-control" id="search-type-control" for="search-type-filter" hidden>Show
-            <select id="search-type-filter" aria-label="Filter search results by type">
-              <option value="all">All results</option>
-              <option value="video">Videos</option>
-              <option value="playlist">Playlists</option>
-            </select>
-          </label>
-          <label class="region-control" for="region-select">Region
-            <select id="region-select" aria-label="Trending region">
-              <option value="US">US</option><option value="GB">UK</option><option value="CA">CA</option><option value="DE">DE</option><option value="JP">JP</option>
-            </select>
-          </label>
+      <section class="watcher" id="watcher" aria-label="Video player">
+        <div class="watcher-heading">
+          <div><p class="kicker">NOW PLAYING</p><h2 id="video-label">Open a video</h2></div>
+          <span>ANON WATCHER PLAYER</span>
         </div>
-        <div class="catalog-heading"><h2 id="catalog-title">Trending videos</h2><span id="catalog-status" aria-live="polite">Loading instance feed…</span></div>
-        <div class="video-grid" id="video-grid" aria-live="polite"></div>
-        <button class="next-page-button" id="next-page-button" type="button" hidden>Next page</button>
-      </section>
-
-      <section class="watcher" id="watcher" aria-label="YouTube video watcher">
-        <div class="watcher-heading"><div><p class="kicker">NOW PLAYING</p><h2>Open a video</h2></div><span>YOUTUBE EMBED</span></div>
         <form id="watch-form" class="watch-form">
-          <label for="video-link">YouTube video or playlist link, or video ID</label>
+          <label for="video-link">Direct video URL</label>
           <div class="input-row">
-            <input id="video-link" name="yt" type="text" placeholder="YouTube video or playlist URL" autocomplete="off" autocapitalize="off" spellcheck="false" required>
+            <input id="video-link" name="video" type="url" placeholder="https://example.com/video.mp4" autocomplete="off" autocapitalize="off" spellcheck="false" required>
             <button class="watch-button" type="submit"><span>Watch</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
           </div>
-          <p class="form-hint">YouTube video or playlist URLs, youtu.be, Shorts, live links, or an 11-character video ID.</p>
-          <label class="playback-option" for="invidious-player-option">
-            <input id="invidious-player-option" type="checkbox">
-            <span>Try ad-free playback via Invidious</span>
-          </label>
-          <p class="playback-hint">Uses a public Invidious instance instead of YouTube's player. Availability and ad-free playback are not guaranteed; the instance may receive your video request.</p>
-          <details class="instance-picker" id="instance-picker">
-            <summary>Choose backend</summary>
-            <label for="player-instance">Invidious instance</label>
-            <div class="instance-picker-row">
-              <select id="player-instance" aria-label="Invidious playback instance" disabled></select>
-              <button id="next-instance-button" type="button" disabled>Try another</button>
-            </div>
-            <p class="instance-status" id="instance-status" aria-live="polite">Loading available instances…</p>
-            <p class="playback-hint">If playback is refused, choose another instance. Browsers cannot reliably detect blocked video embeds.</p>
-          </details>
+          <p class="form-hint">Use a direct HTTPS link to a video file or stream. YouTube watch links and video IDs are not direct media URLs. HLS playback depends on browser support.</p>
         </form>
 
-        <div class="player-wrap" id="player-wrap">
+        <div class="player-wrap" id="player-wrap" tabindex="0" aria-label="Video player. Keyboard: Space to play or pause, arrow keys to seek or change volume, M to mute, F for fullscreen.">
+          <video id="media-player" preload="metadata" playsinline aria-label="Video"></video>
           <div class="empty-player" id="empty-player">
             <span class="empty-glyph" aria-hidden="true"><svg viewBox="0 0 48 48" fill="none"><path d="M9 10.5c0-2 2.2-3.2 4-2.2l27 14.5a1.4 1.4 0 0 1 0 2.4l-27 14.5c-1.8 1-4-.2-4-2.2v-27Z" fill="currentColor"/></svg></span>
             <p>Your video goes here.</p>
-            <span>Paste a link above to get started.</span>
+            <span>Paste a direct video URL above to get started.</span>
           </div>
-          <iframe id="video-player" title="YouTube video player" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen referrerpolicy="strict-origin-when-cross-origin" hidden></iframe>
+          <div class="custom-controls" id="custom-controls" hidden>
+            <input class="seek-slider" id="seek-slider" type="range" min="0" max="0" step="0.1" value="0" aria-label="Seek video" disabled>
+            <div class="control-row">
+              <button class="control-button" id="play-button" type="button" aria-label="Play">
+                <svg id="play-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.8c0-.8.9-1.3 1.6-.9l11 6.2a1 1 0 0 1 0 1.8l-11 6.2c-.7.4-1.6-.1-1.6-.9V4.8Z" fill="currentColor"/></svg>
+                <svg id="pause-icon" viewBox="0 0 24 24" aria-hidden="true" hidden><path d="M6 5h4v14H6zm8 0h4v14h-4z" fill="currentColor"/></svg>
+              </button>
+              <span class="time-display"><span id="current-time">0:00</span><span aria-hidden="true"> / </span><span id="duration">0:00</span></span>
+              <span class="control-spacer"></span>
+              <button class="control-button" id="mute-button" type="button" aria-label="Mute">
+                <svg id="volume-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4Zm12-.5a5 5 0 0 1 0 7m2-9a8 8 0 0 1 0 11" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <svg id="muted-icon" viewBox="0 0 24 24" aria-hidden="true" hidden><path d="M4 9v6h4l5 4V5L8 9H4Zm12 1 5 5m0-5-5 5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+              <input class="volume-slider" id="volume-slider" type="range" min="0" max="1" step="0.05" value="1" aria-label="Volume">
+              <label class="speed-control" for="playback-speed">Speed</label>
+              <select id="playback-speed" aria-label="Playback speed">
+                <option value="0.5">0.5×</option><option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option>
+              </select>
+              <button class="control-button" id="fullscreen-button" type="button" aria-label="Enter fullscreen">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4H4v4m12-4h4v4M4 16v4h4m12-4v4h-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+            </div>
+          </div>
         </div>
 
         <div class="player-bar" id="player-bar" hidden>
-          <div class="now-playing"><span class="playing-mark"></span><span id="video-label">NOW PLAYING</span></div>
+          <div class="now-playing"><span class="playing-mark"></span><span id="source-label">DIRECT MEDIA</span></div>
           <div class="player-actions">
             <button class="icon-button" id="share-button" type="button" title="Copy share link" aria-label="Copy share link" disabled><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.1 0l2-2A5 5 0 0 0 12 3.9l-1.1 1.1m3.1 6a5 5 0 0 0-7.1 0l-2 2A5 5 0 0 0 12 20.1l1.1-1.1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
             <button class="icon-button" id="clear-button" type="button" title="Clear video" aria-label="Clear video"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
           </div>
         </div>
-        <section class="queue" aria-label="Playback queue">
-          <div class="queue-heading">
-            <div><p class="kicker">UP NEXT</p><h3>Queue <span id="queue-count">0</span></h3></div>
-            <div class="queue-actions">
-              <button class="queue-clear" id="queue-play-next" type="button" disabled>Play next</button>
-              <button class="queue-clear" id="queue-clear" type="button" disabled>Clear queue</button>
-            </div>
-          </div>
-          <p class="queue-empty" id="queue-empty">Add videos or playlists from search results.</p>
-          <ol class="queue-list" id="queue-list"></ol>
-        </section>
         <p class="message" id="message" role="status" aria-live="polite"></p>
       </section>
 
-      <section class="details" aria-label="About privacy">
+      <section class="details" aria-label="Player information">
         <div class="detail-block">
-          <span class="detail-index">01 / DISCOVER</span>
-          <h2>Search, playlists, and queue</h2>
-          <p>Video and playlist listings come from a public Invidious instance. Search terms are sent to that instance, and thumbnails may load from its servers or YouTube. Your queue stays in this page and is not saved.</p>
+          <span class="detail-index">01 / SOURCES</span>
+          <h2>Direct media only</h2>
+          <p>Paste a direct link to a media file or stream. A YouTube watch page or video ID is not a media URL; this player does not search for or extract YouTube streams.</p>
         </div>
         <div class="detail-block">
-          <span class="detail-index">02 / PLAYER</span>
-          <h2>Keep the link flow</h2>
-          <p>Paste a YouTube video or playlist link, or a video ID. By default playback uses YouTube's privacy-enhanced embed; the optional Invidious player may avoid ads but depends on the selected instance.</p>
+          <span class="detail-index">02 / CONTROLS</span>
+          <h2>Playback your way</h2>
+          <p>Use the custom controls to play, seek, adjust volume and speed, or enter fullscreen. HLS and other formats depend on your browser's built-in media support.</p>
         </div>
         <div class="detail-block">
           <span class="detail-index">03 / PRIVACY</span>
           <h2>No local history</h2>
-          <p>Share links use <code>?yt=VIDEO_ID</code> or <code>?list=PLAYLIST_ID</code>. The selected Invidious instance receives search queries; playback goes to YouTube by default or to Invidious when selected. This is not anonymity.</p>
+          <p>Playback happens directly from the media host you enter. Share links include the full media URL, including any query parameters; do not share private or temporary links.</p>
         </div>
       </section>
     </main>
 
-    <footer><span>ANON WATCHER</span><span>SEARCH · PLAYLISTS · QUEUE · PRIVACY-ENHANCED PLAYER</span></footer>
+    <footer><span>ANON WATCHER</span><span>DIRECT MEDIA · CUSTOM PLAYER · NO WATCH HISTORY</span></footer>
   </div>
   <script src="app.js" defer></script>
 </body>

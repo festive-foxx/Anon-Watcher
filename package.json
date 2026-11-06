@@ -2,14 +2,11 @@
   "name": "Anon-Watcher",
   "version": "1.0.0",
   "private": true,
-  "description": "A restricted HTTPS reader proxy with an explicit host allowlist.",
+  "description": "A custom HTML5 player for direct media URLs.",
   "scripts": {
     "start": "node server.js"
   },
   "engines": {
     "node": ">=20"
-  },
-  "dependencies": {
-    "node-html-parser": "^9.0.5"
   }
 }
