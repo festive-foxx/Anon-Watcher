@@ -32,6 +32,7 @@ const message = document.querySelector('#message');
 let currentMediaUrl = '';
 let currentVideoId = '';
 let hlsPlayer = null;
+let cancelHlsStartup = null;
 let searchRequestId = 0;
 let playbackRequestId = 0;
 let nextPageToken = '';
@@ -256,9 +257,11 @@ function updateFullscreenButton() {
 
 function showMedia(url, title, videoId = '', updateAddress = true, mediaType = 'mp4') {
   if (hlsPlayer) {
+    if (cancelHlsStartup) cancelHlsStartup(new Error('Playback was replaced.'));
     hlsPlayer.destroy();
     hlsPlayer = null;
   }
+  let mediaReady = Promise.resolve();
   currentMediaUrl = url.toString();
   currentVideoId = videoId;
   input.value = currentMediaUrl;
@@ -275,12 +278,34 @@ function showMedia(url, title, videoId = '', updateAddress = true, mediaType = '
     }
     hlsPlayer = new window.Hls();
     const activeHlsPlayer = hlsPlayer;
-    activeHlsPlayer.on(window.Hls.Events.ERROR, (_event, data) => {
-      if (data.fatal && hlsPlayer === activeHlsPlayer) {
-        message.textContent = 'The HLS stream could not be loaded. Try another video or stream instance.';
-        activeHlsPlayer.destroy();
-        hlsPlayer = null;
-      }
+    mediaReady = new Promise((resolve, reject) => {
+      const timeoutId = window.setTimeout(() => {
+        fail(new Error('Timed out while loading the HLS stream.'));
+      }, 20000);
+      const onManifestParsed = () => finish(resolve);
+      const onError = (_event, data) => {
+        if (data.fatal) {
+          fail(new Error('The HLS stream could not be loaded. Try another video or stream instance.'));
+        }
+      };
+      const finish = (callback, value) => {
+        window.clearTimeout(timeoutId);
+        activeHlsPlayer.off(window.Hls.Events.MANIFEST_PARSED, onManifestParsed);
+        activeHlsPlayer.off(window.Hls.Events.ERROR, onError);
+        if (cancelHlsStartup === cancel) cancelHlsStartup = null;
+        callback(value);
+      };
+      const fail = (error) => {
+        finish(reject, error);
+        if (hlsPlayer === activeHlsPlayer) {
+          activeHlsPlayer.destroy();
+          hlsPlayer = null;
+        }
+      };
+      const cancel = (error) => finish(reject, error);
+      cancelHlsStartup = cancel;
+      activeHlsPlayer.on(window.Hls.Events.MANIFEST_PARSED, onManifestParsed);
+      activeHlsPlayer.on(window.Hls.Events.ERROR, onError);
     });
     activeHlsPlayer.loadSource(currentMediaUrl);
     activeHlsPlayer.attachMedia(player);
@@ -298,6 +323,7 @@ function showMedia(url, title, videoId = '', updateAddress = true, mediaType = '
     else shareUrl.searchParams.set('video', currentMediaUrl);
     window.history.replaceState({}, '', shareUrl);
   }
+  return mediaReady;
 }
 
 async function playVideo(videoId, title = '', updateAddress = true) {
@@ -307,7 +333,8 @@ async function playVideo(videoId, title = '', updateAddress = true) {
     const result = await requestJson(`/api/videos/${encodeURIComponent(videoId)}/stream`);
     if (requestId !== playbackRequestId) return;
     const url = parseMediaUrl(result.url);
-    showMedia(url, title || result.title || 'YouTube video', videoId, updateAddress, result.type);
+    await showMedia(url, title || result.title || 'YouTube video', videoId, updateAddress, result.type);
+    if (requestId !== playbackRequestId) return;
     try {
       await player.play();
     } catch {
@@ -322,6 +349,7 @@ async function playVideo(videoId, title = '', updateAddress = true) {
 function clearMedia(updateAddress = true) {
   playbackRequestId += 1;
   if (hlsPlayer) {
+    if (cancelHlsStartup) cancelHlsStartup(new Error('Playback was cancelled.'));
     hlsPlayer.destroy();
     hlsPlayer = null;
   }
