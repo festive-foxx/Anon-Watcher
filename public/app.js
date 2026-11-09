@@ -8,31 +8,16 @@ const resultsTitle = document.querySelector('#results-title');
 const searchResults = document.querySelector('#search-results');
 const nextPageButton = document.querySelector('#next-page-button');
 const player = document.querySelector('#media-player');
-const playerWrap = document.querySelector('#player-wrap');
+const youtubePlayer = document.querySelector('#youtube-player');
 const emptyPlayer = document.querySelector('#empty-player');
-const customControls = document.querySelector('#custom-controls');
 const playerBar = document.querySelector('#player-bar');
 const videoLabel = document.querySelector('#video-label');
 const sourceLabel = document.querySelector('#source-label');
-const playButton = document.querySelector('#play-button');
-const playIcon = document.querySelector('#play-icon');
-const pauseIcon = document.querySelector('#pause-icon');
-const seekSlider = document.querySelector('#seek-slider');
-const currentTimeLabel = document.querySelector('#current-time');
-const durationLabel = document.querySelector('#duration');
-const muteButton = document.querySelector('#mute-button');
-const volumeIcon = document.querySelector('#volume-icon');
-const mutedIcon = document.querySelector('#muted-icon');
-const volumeSlider = document.querySelector('#volume-slider');
-const playbackSpeed = document.querySelector('#playback-speed');
-const fullscreenButton = document.querySelector('#fullscreen-button');
 const shareButton = document.querySelector('#share-button');
 const clearButton = document.querySelector('#clear-button');
 const message = document.querySelector('#message');
 let currentMediaUrl = '';
 let currentVideoId = '';
-let currentFallbackStream = null;
-let fallbackAttempt = null;
 let hlsPlayer = null;
 let cancelHlsStartup = null;
 let searchRequestId = 0;
@@ -43,19 +28,37 @@ let resultQuery = '';
 let resultType = 'all';
 let resultPlaylistId = '';
 
-function formatTime(seconds) {
-  if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
-  const totalSeconds = Math.floor(seconds);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const remainingSeconds = totalSeconds % 60;
-  return hours
-    ? `${hours}:${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`
-    : `${minutes}:${String(remainingSeconds).padStart(2, '0')}`;
-}
+function parseYouTubeVideoId(value) {
+  const trimmed = value.trim();
+  if (/^[A-Za-z0-9_-]{11}$/.test(trimmed)) return trimmed;
 
-function isPlaybackInterrupted(error) {
-  return error.name === 'AbortError';
+  let url;
+  try {
+    url = new URL(/^[a-z][a-z\d+.-]*:/i.test(trimmed) ? trimmed : `https://${trimmed}`);
+  } catch {
+    return null;
+  }
+  const hostname = url.hostname.toLowerCase();
+  const youtubeHosts = new Set([
+    'youtube.com',
+    'www.youtube.com',
+    'm.youtube.com',
+    'music.youtube.com',
+    'youtu.be',
+    'www.youtu.be',
+  ]);
+  if (!youtubeHosts.has(hostname)) return null;
+  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) {
+    throw new Error('Use an HTTP(S) YouTube link without embedded credentials.');
+  }
+
+  const videoId = hostname.endsWith('youtu.be')
+    ? url.pathname.split('/').filter(Boolean)[0]
+    : url.pathname === '/watch'
+      ? url.searchParams.get('v')
+      : url.pathname.match(/^\/(?:shorts|live|embed)\/([^/]+)/)?.[1];
+  if (videoId && /^[A-Za-z0-9_-]{11}$/.test(videoId)) return videoId;
+  throw new Error('Enter a valid YouTube video link or 11-character video ID.');
 }
 
 function parseMediaUrl(value) {
@@ -71,10 +74,6 @@ function parseMediaUrl(value) {
   if (window.location.protocol === 'https:' && url.protocol !== 'https:') {
     throw new Error('Use an HTTPS media URL on this secure page.');
   }
-  if (['youtube.com', 'www.youtube.com', 'm.youtube.com', 'youtu.be'].includes(url.hostname)
-    && (url.pathname === '/watch' || url.hostname === 'youtu.be' || /^\/(?:shorts|live|embed)\//.test(url.pathname))) {
-    throw new Error('Choose a video from search or paste a direct media URL.');
-  }
   return url;
 }
 
@@ -85,7 +84,7 @@ async function requestJson(path) {
     result = await response.json();
   } catch {
     if (window.location.hostname === 'festive-foxx.github.io') {
-      throw new Error('YouTube search and stream lookup require the Anon Watcher server; GitHub Pages is static.');
+      throw new Error('YouTube search requires the Anon Watcher server; GitHub Pages is static.');
     }
     throw new Error('The Anon Watcher server returned an invalid response.');
   }
@@ -230,57 +229,33 @@ function browsePlaylist(playlistId, title, updateAddress = true) {
   }
 }
 
-function updatePlayButton() {
-  const paused = player.paused || player.ended;
-  playIcon.hidden = !paused;
-  pauseIcon.hidden = paused;
-  playButton.setAttribute('aria-label', paused ? 'Play' : 'Pause');
-}
-
-function updateTime() {
-  const duration = Number.isFinite(player.duration) ? player.duration : 0;
-  seekSlider.max = String(duration);
-  seekSlider.value = String(Math.min(player.currentTime || 0, duration));
-  seekSlider.disabled = duration === 0;
-  seekSlider.setAttribute('aria-valuetext', `${formatTime(player.currentTime)} of ${formatTime(duration)}`);
-  currentTimeLabel.textContent = formatTime(player.currentTime);
-  durationLabel.textContent = formatTime(duration);
-}
-
-function updateVolume() {
-  const muted = player.muted || player.volume === 0;
-  volumeIcon.hidden = muted;
-  mutedIcon.hidden = !muted;
-  muteButton.setAttribute('aria-label', muted ? 'Unmute' : 'Mute');
-  volumeSlider.value = String(muted ? 0 : player.volume);
-}
-
-function updateFullscreenButton() {
-  const fullscreen = document.fullscreenElement === playerWrap;
-  fullscreenButton.setAttribute('aria-label', fullscreen ? 'Exit fullscreen' : 'Enter fullscreen');
-  fullscreenButton.title = fullscreen ? 'Exit fullscreen' : 'Enter fullscreen';
-}
-
-function showMedia(url, title, videoId = '', updateAddress = true, mediaType = 'mp4', fallback = null) {
+function stopDirectPlayback() {
   if (hlsPlayer) {
     if (cancelHlsStartup) cancelHlsStartup(new Error('Playback was replaced.'));
     hlsPlayer.destroy();
     hlsPlayer = null;
   }
-  let mediaReady = Promise.resolve();
+  player.pause();
+  player.removeAttribute('src');
+  player.load();
+}
+
+function showMedia(url, title = '', updateAddress = true, mediaType = 'mp4') {
+  stopDirectPlayback();
+  youtubePlayer.src = 'about:blank';
+  youtubePlayer.hidden = true;
+  player.hidden = false;
   currentMediaUrl = url.toString();
-  currentVideoId = videoId;
-  currentFallbackStream = fallback;
-  fallbackAttempt = null;
+  currentVideoId = '';
   input.value = currentMediaUrl;
   videoLabel.textContent = title || url.pathname.split('/').filter(Boolean).pop() || url.hostname;
   sourceLabel.textContent = url.hostname;
   message.textContent = '';
   emptyPlayer.hidden = true;
-  customControls.hidden = false;
   playerBar.hidden = false;
   shareButton.disabled = false;
   const isHls = mediaType === 'hls' || /\.m3u8$/i.test(url.pathname);
+  let mediaReady = Promise.resolve();
   if (isHls && window.Hls?.isSupported()) {
     hlsPlayer = new window.Hls();
     const activeHlsPlayer = hlsPlayer;
@@ -291,7 +266,7 @@ function showMedia(url, title, videoId = '', updateAddress = true, mediaType = '
       const onManifestParsed = () => finish(resolve);
       const onError = (_event, data) => {
         if (data.fatal) {
-          fail(new Error('The HLS stream could not be loaded. Try another video or stream instance.'));
+          fail(new Error('The HLS stream could not be loaded. Check the URL or try another browser.'));
         }
       };
       const finish = (callback, value) => {
@@ -321,144 +296,92 @@ function showMedia(url, title, videoId = '', updateAddress = true, mediaType = '
     player.src = currentMediaUrl;
     player.load();
   }
-  updateTime();
-  updatePlayButton();
 
   if (updateAddress) {
     const shareUrl = new URL(window.location.href);
     shareUrl.search = '';
-    if (videoId) shareUrl.searchParams.set('yt', videoId);
-    else shareUrl.searchParams.set('video', currentMediaUrl);
+    shareUrl.searchParams.set('video', currentMediaUrl);
     window.history.replaceState({}, '', shareUrl);
   }
   return mediaReady;
 }
 
-async function attemptFallback() {
-  if (!currentFallbackStream) return fallbackAttempt || false;
-  if (fallbackAttempt) return fallbackAttempt;
-  const fallback = currentFallbackStream;
-  currentFallbackStream = null;
-  const attempt = (async () => {
-    try {
-      const url = parseMediaUrl(fallback.url);
-      await showMedia(url, videoLabel.textContent, currentVideoId, true, fallback.type);
-      await player.play();
-      message.textContent = '';
-      return true;
-    } catch (error) {
-      if (isPlaybackInterrupted(error)) return true;
-      if (error.name === 'NotAllowedError') {
-        message.textContent = 'HLS stream loaded. Press play to start.';
-        return true;
-      }
-      message.textContent = `The video stream failed, and its HLS fallback could not be played: ${error.message}`;
-      return false;
-    }
-  })();
-  fallbackAttempt = attempt;
-  try {
-    return await attempt;
-  } finally {
-    if (fallbackAttempt === attempt) fallbackAttempt = null;
+function showYouTubeVideo(videoId, title = '', updateAddress = true) {
+  stopDirectPlayback();
+  currentVideoId = videoId;
+  currentMediaUrl = `https://www.youtube.com/watch?v=${videoId}`;
+  input.value = currentMediaUrl;
+  videoLabel.textContent = title || 'YouTube video';
+  sourceLabel.textContent = 'YOUTUBE · PRIVACY-ENHANCED EMBED';
+  message.textContent = '';
+  emptyPlayer.hidden = true;
+  player.hidden = true;
+  youtubePlayer.hidden = false;
+  youtubePlayer.title = videoLabel.textContent;
+  youtubePlayer.src = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(videoId)}?autoplay=1&controls=1&playsinline=1&rel=0`;
+  playerBar.hidden = false;
+  shareButton.disabled = false;
+
+  if (updateAddress) {
+    const shareUrl = new URL(window.location.href);
+    shareUrl.search = '';
+    shareUrl.searchParams.set('yt', videoId);
+    window.history.replaceState({}, '', shareUrl);
   }
 }
 
-async function playVideo(videoId, title = '', updateAddress = true) {
-  const requestId = ++playbackRequestId;
-  message.textContent = 'Finding a playable stream…';
-  try {
-    const result = await requestJson(`/api/videos/${encodeURIComponent(videoId)}/stream`);
-    if (requestId !== playbackRequestId) return;
-    if (result.fallback) {
-      if (typeof result.fallback.url !== 'string' || !['mp4', 'hls'].includes(result.fallback.type)) {
-        throw new Error('The server returned an invalid fallback stream.');
-      }
-    }
-    const url = parseMediaUrl(result.url);
-    await showMedia(
-      url,
-      title || result.title || 'YouTube video',
-      videoId,
-      updateAddress,
-      result.type,
-      result.fallback || null,
-    );
-    if (requestId !== playbackRequestId) return;
-    try {
-      await player.play();
-      message.textContent = '';
-    } catch (error) {
-      if (requestId !== playbackRequestId || isPlaybackInterrupted(error)) return;
-      if (error.name === 'NotAllowedError') {
-        message.textContent = 'Stream loaded. Press play to start.';
-      } else {
-        await attemptFallback();
-      }
-    }
-    document.querySelector('#watcher').scrollIntoView({ behavior: 'smooth', block: 'start' });
-  } catch (error) {
-    if (requestId === playbackRequestId) message.textContent = error.message;
-  }
+function playVideo(videoId, title = '', updateAddress = true) {
+  playbackRequestId += 1;
+  showYouTubeVideo(videoId, title, updateAddress);
+  document.querySelector('#watcher').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function clearMedia(updateAddress = true) {
   playbackRequestId += 1;
-  currentFallbackStream = null;
-  fallbackAttempt = null;
-  if (hlsPlayer) {
-    if (cancelHlsStartup) cancelHlsStartup(new Error('Playback was cancelled.'));
-    hlsPlayer.destroy();
-    hlsPlayer = null;
-  }
-  player.pause();
-  player.removeAttribute('src');
-  player.load();
+  stopDirectPlayback();
+  youtubePlayer.src = 'about:blank';
+  youtubePlayer.hidden = true;
+  player.hidden = false;
   currentMediaUrl = '';
   currentVideoId = '';
   input.value = '';
   videoLabel.textContent = 'Open a video';
   sourceLabel.textContent = 'DIRECT MEDIA';
   emptyPlayer.hidden = false;
-  customControls.hidden = true;
   playerBar.hidden = true;
   shareButton.disabled = true;
   message.textContent = '';
-  updateTime();
-  updatePlayButton();
   if (updateAddress) window.history.replaceState({}, '', window.location.pathname);
 }
 
-async function togglePlayback() {
-  if (!player.paused && !player.ended) {
-    player.pause();
-    return;
-  }
-  try {
-    await player.play();
-    message.textContent = '';
-  } catch (error) {
-    if (isPlaybackInterrupted(error)) return;
-    if (currentFallbackStream || fallbackAttempt) {
-      await attemptFallback();
-    } else {
-      message.textContent = `Playback could not start: ${error.message}`;
-    }
-  }
-}
-
-form.addEventListener('submit', (event) => {
+form.addEventListener('submit', async (event) => {
   event.preventDefault();
+  const requestId = ++playbackRequestId;
   try {
-    showMedia(parseMediaUrl(input.value), '');
-    player.play().catch((error) => {
-      if (!isPlaybackInterrupted(error)) {
+    const videoId = parseYouTubeVideoId(input.value);
+    if (videoId) {
+      playVideo(videoId);
+      return;
+    }
+
+    await showMedia(parseMediaUrl(input.value));
+    if (requestId !== playbackRequestId) return;
+    try {
+      await player.play();
+      message.textContent = '';
+    } catch (error) {
+      if (requestId !== playbackRequestId) return;
+      if (error.name === 'NotAllowedError') {
+        message.textContent = 'Media loaded. Press play to start.';
+      } else if (error.name !== 'AbortError') {
         message.textContent = `Playback could not start: ${error.message}`;
       }
-    });
+    }
   } catch (error) {
-    message.textContent = error.message;
-    input.focus();
+    if (requestId === playbackRequestId) {
+      message.textContent = error.message;
+      input.focus();
+    }
   }
 });
 
@@ -471,73 +394,9 @@ nextPageButton.addEventListener('click', () => {
   loadResultPage(nextPageToken, true);
 });
 
-playButton.addEventListener('click', togglePlayback);
-player.addEventListener('click', (event) => {
-  if (event.target === player && currentMediaUrl) togglePlayback();
-});
-player.addEventListener('play', updatePlayButton);
-player.addEventListener('pause', updatePlayButton);
-player.addEventListener('ended', updatePlayButton);
-player.addEventListener('timeupdate', updateTime);
-player.addEventListener('durationchange', updateTime);
-player.addEventListener('loadedmetadata', updateTime);
-player.addEventListener('volumechange', updateVolume);
 player.addEventListener('error', () => {
-  if (currentFallbackStream) {
-    void attemptFallback();
-  } else if (currentMediaUrl && !fallbackAttempt) {
+  if (currentMediaUrl && !currentVideoId) {
     message.textContent = 'The media could not be played. Check the URL, access permissions, format, and browser support.';
-  }
-});
-
-seekSlider.addEventListener('input', () => {
-  if (Number.isFinite(player.duration)) player.currentTime = Number(seekSlider.value);
-});
-muteButton.addEventListener('click', () => {
-  if (player.muted || player.volume === 0) {
-    if (player.volume === 0) player.volume = 0.5;
-    player.muted = false;
-  } else {
-    player.muted = true;
-  }
-});
-volumeSlider.addEventListener('input', () => {
-  player.volume = Number(volumeSlider.value);
-  player.muted = player.volume === 0;
-});
-playbackSpeed.addEventListener('change', () => {
-  player.playbackRate = Number(playbackSpeed.value);
-});
-
-fullscreenButton.addEventListener('click', async () => {
-  try {
-    if (document.fullscreenElement === playerWrap) await document.exitFullscreen();
-    else await playerWrap.requestFullscreen();
-  } catch (error) {
-    message.textContent = `Fullscreen could not be changed: ${error.message}`;
-  }
-});
-document.addEventListener('fullscreenchange', updateFullscreenButton);
-
-playerWrap.addEventListener('keydown', (event) => {
-  if (event.target !== playerWrap && event.target !== player) return;
-  if (!currentMediaUrl) return;
-  if (event.key === ' ' || event.key === 'k') {
-    event.preventDefault();
-    togglePlayback();
-  } else if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-    event.preventDefault();
-    const direction = event.key === 'ArrowRight' ? 1 : -1;
-    player.currentTime = Math.max(0, Math.min(player.duration || Infinity, player.currentTime + direction * 5));
-  } else if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
-    event.preventDefault();
-    const direction = event.key === 'ArrowUp' ? 1 : -1;
-    player.volume = Math.max(0, Math.min(1, player.volume + direction * 0.05));
-    player.muted = player.volume === 0;
-  } else if (event.key.toLowerCase() === 'm') {
-    player.muted = !player.muted;
-  } else if (event.key.toLowerCase() === 'f') {
-    fullscreenButton.click();
   }
 });
 
@@ -564,12 +423,24 @@ const initialVideo = parameters.get('yt');
 const initialMedia = parameters.get('video');
 const initialPlaylist = parameters.get('list');
 const initialQuery = parameters.get('q');
-if (initialVideo && /^[A-Za-z0-9_-]{11}$/.test(initialVideo)) {
-  playVideo(initialVideo, '', false);
+if (initialVideo) {
+  try {
+    const videoId = parseYouTubeVideoId(initialVideo);
+    if (videoId) playVideo(videoId, '', false);
+  } catch (error) {
+    message.textContent = error.message;
+  }
 } else if (initialMedia) {
   input.value = initialMedia;
   try {
-    showMedia(parseMediaUrl(initialMedia), '', '', false);
+    const videoId = parseYouTubeVideoId(initialMedia);
+    if (videoId) {
+      playVideo(videoId, '', false);
+    } else {
+      void showMedia(parseMediaUrl(initialMedia), '', false).catch((error) => {
+        message.textContent = error.message;
+      });
+    }
   } catch (error) {
     message.textContent = error.message;
   }
@@ -592,6 +463,3 @@ requestJson('/api/config').then((config) => {
     searchStatus.textContent = 'YouTube search requires the Anon Watcher server; GitHub Pages is static.';
   }
 });
-
-updateVolume();
-updateFullscreenButton();

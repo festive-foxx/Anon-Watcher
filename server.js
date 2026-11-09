@@ -396,7 +396,7 @@ const httpServer = createServer(async (request, response) => {
     if (request.method === 'GET' && (requestUrl.pathname === '/' || requestUrl.pathname === '/index.html')) {
       response.writeHead(200, {
         'content-type': 'text/html; charset=utf-8',
-        'content-security-policy': "default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self' https:; img-src 'self' https://i.ytimg.com https://yt3.ggpht.com; media-src 'self' https: blob:; frame-src 'none'; frame-ancestors 'none'",
+        'content-security-policy': "default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self' https:; img-src 'self' https://i.ytimg.com https://yt3.ggpht.com; media-src 'self' https: blob:; frame-src https://www.youtube-nocookie.com; frame-ancestors 'none'",
         'x-content-type-options': 'nosniff',
         'cache-control': 'no-store',
       });
