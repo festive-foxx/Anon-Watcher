@@ -54,6 +54,10 @@ function formatTime(seconds) {
     : `${minutes}:${String(remainingSeconds).padStart(2, '0')}`;
 }
 
+function isPlaybackInterrupted(error) {
+  return error.name === 'AbortError';
+}
+
 function parseMediaUrl(value) {
   let url;
   try {
@@ -343,6 +347,7 @@ async function attemptFallback() {
       message.textContent = '';
       return true;
     } catch (error) {
+      if (isPlaybackInterrupted(error)) return true;
       if (error.name === 'NotAllowedError') {
         message.textContent = 'HLS stream loaded. Press play to start.';
         return true;
@@ -384,6 +389,7 @@ async function playVideo(videoId, title = '', updateAddress = true) {
       await player.play();
       message.textContent = '';
     } catch (error) {
+      if (requestId !== playbackRequestId || isPlaybackInterrupted(error)) return;
       if (error.name === 'NotAllowedError') {
         message.textContent = 'Stream loaded. Press play to start.';
       } else {
@@ -432,6 +438,7 @@ async function togglePlayback() {
     await player.play();
     message.textContent = '';
   } catch (error) {
+    if (isPlaybackInterrupted(error)) return;
     if (currentFallbackStream || fallbackAttempt) {
       await attemptFallback();
     } else {
@@ -444,8 +451,10 @@ form.addEventListener('submit', (event) => {
   event.preventDefault();
   try {
     showMedia(parseMediaUrl(input.value), '');
-    player.play().catch(() => {
-      message.textContent = 'Media loaded. Press play to start.';
+    player.play().catch((error) => {
+      if (!isPlaybackInterrupted(error)) {
+        message.textContent = `Playback could not start: ${error.message}`;
+      }
     });
   } catch (error) {
     message.textContent = error.message;
