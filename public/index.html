@@ -55,7 +55,7 @@
             <input id="video-link" name="video" type="url" placeholder="https://example.com/video.mp4" autocomplete="off" autocapitalize="off" spellcheck="false" required>
             <button class="watch-button" type="submit"><span>Watch</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
           </div>
-          <p class="form-hint">This field accepts a direct media URL. YouTube search results are resolved automatically when a playable stream is available. HLS streams are supported in compatible browsers.</p>
+          <p class="form-hint">Paste a direct MP4 or HLS (.m3u8) URL. YouTube search results try an HLS fallback when the MP4 stream is unsupported.</p>
         </form>
 
         <div class="player-wrap" id="player-wrap" tabindex="0" aria-label="Video player. Keyboard: Space to play or pause, arrow keys to seek or change volume, M to mute, F for fullscreen.">

@@ -370,22 +370,26 @@ const httpServer = createServer(async (request, response) => {
           return [];
         }
       }).sort((a, b) => b.height - a.height);
+      let hlsStream;
+      try {
+        const hlsUrl = new URL(details.hlsUrl);
+        if (hlsUrl.protocol === 'https:' && !hlsUrl.username && !hlsUrl.password) {
+          hlsStream = { url: hlsUrl.toString(), type: 'hls', quality: '' };
+        }
+      } catch {
+        // An HLS fallback is optional when a progressive stream is available.
+      }
+
       let stream;
       if (streams.length) {
         stream = { url: streams[0].url, type: 'mp4', quality: streams[0].quality };
-      } else {
-        try {
-          const hlsUrl = new URL(details.hlsUrl);
-          if (hlsUrl.protocol === 'https:' && !hlsUrl.username && !hlsUrl.password) {
-            stream = { url: hlsUrl.toString(), type: 'hls', quality: '' };
-          }
-        } catch {
-          throw createError('The selected video has no browser-compatible stream available.', 404);
-        }
+      } else if (hlsStream) {
+        stream = hlsStream;
       }
       if (!stream) throw createError('The selected video has no browser-compatible stream available.', 404);
       return sendJson(response, 200, {
         ...stream,
+        ...(stream.type === 'mp4' && hlsStream ? { fallback: hlsStream } : {}),
         title: typeof details.title === 'string' ? details.title : '',
       });
     }

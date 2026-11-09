@@ -272,7 +272,8 @@ function showMedia(url, title, videoId = '', updateAddress = true, mediaType = '
   customControls.hidden = false;
   playerBar.hidden = false;
   shareButton.disabled = false;
-  if (mediaType === 'hls' && !player.canPlayType('application/vnd.apple.mpegurl')) {
+  const isHls = mediaType === 'hls' || /\.m3u8$/i.test(url.pathname);
+  if (isHls && !player.canPlayType('application/vnd.apple.mpegurl')) {
     if (!window.Hls || !window.Hls.isSupported()) {
       throw new Error('This browser does not support HLS playback.');
     }
@@ -332,15 +333,32 @@ async function playVideo(videoId, title = '', updateAddress = true) {
   try {
     const result = await requestJson(`/api/videos/${encodeURIComponent(videoId)}/stream`);
     if (requestId !== playbackRequestId) return;
-    const url = parseMediaUrl(result.url);
-    await showMedia(url, title || result.title || 'YouTube video', videoId, updateAddress, result.type);
-    if (requestId !== playbackRequestId) return;
-    try {
-      await player.play();
-    } catch {
-      message.textContent = 'Stream loaded. Press play to start.';
+    const streams = [result];
+    if (result.fallback) {
+      if (typeof result.fallback.url !== 'string' || !['mp4', 'hls'].includes(result.fallback.type)) {
+        throw new Error('The server returned an invalid fallback stream.');
+      }
+      streams.push(result.fallback);
     }
-    document.querySelector('#watcher').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    for (const [index, stream] of streams.entries()) {
+      try {
+        const url = parseMediaUrl(stream.url);
+        await showMedia(url, title || result.title || 'YouTube video', videoId, updateAddress, stream.type);
+        if (requestId !== playbackRequestId) return;
+        await player.play();
+        message.textContent = '';
+        document.querySelector('#watcher').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        return;
+      } catch (error) {
+        if (requestId !== playbackRequestId) return;
+        if (error.name === 'NotAllowedError') {
+          message.textContent = 'Stream loaded. Press play to start.';
+          document.querySelector('#watcher').scrollIntoView({ behavior: 'smooth', block: 'start' });
+          return;
+        }
+        if (index === streams.length - 1) throw error;
+      }
+    }
   } catch (error) {
     if (requestId === playbackRequestId) message.textContent = error.message;
   }
