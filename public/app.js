@@ -31,6 +31,8 @@ const clearButton = document.querySelector('#clear-button');
 const message = document.querySelector('#message');
 let currentMediaUrl = '';
 let currentVideoId = '';
+let currentFallbackStream = null;
+let fallbackAttempt = null;
 let hlsPlayer = null;
 let cancelHlsStartup = null;
 let searchRequestId = 0;
@@ -255,7 +257,7 @@ function updateFullscreenButton() {
   fullscreenButton.title = fullscreen ? 'Exit fullscreen' : 'Enter fullscreen';
 }
 
-function showMedia(url, title, videoId = '', updateAddress = true, mediaType = 'mp4') {
+function showMedia(url, title, videoId = '', updateAddress = true, mediaType = 'mp4', fallback = null) {
   if (hlsPlayer) {
     if (cancelHlsStartup) cancelHlsStartup(new Error('Playback was replaced.'));
     hlsPlayer.destroy();
@@ -264,6 +266,8 @@ function showMedia(url, title, videoId = '', updateAddress = true, mediaType = '
   let mediaReady = Promise.resolve();
   currentMediaUrl = url.toString();
   currentVideoId = videoId;
+  currentFallbackStream = fallback;
+  fallbackAttempt = null;
   input.value = currentMediaUrl;
   videoLabel.textContent = title || url.pathname.split('/').filter(Boolean).pop() || url.hostname;
   sourceLabel.textContent = url.hostname;
@@ -273,10 +277,7 @@ function showMedia(url, title, videoId = '', updateAddress = true, mediaType = '
   playerBar.hidden = false;
   shareButton.disabled = false;
   const isHls = mediaType === 'hls' || /\.m3u8$/i.test(url.pathname);
-  if (isHls && !player.canPlayType('application/vnd.apple.mpegurl')) {
-    if (!window.Hls || !window.Hls.isSupported()) {
-      throw new Error('This browser does not support HLS playback.');
-    }
+  if (isHls && window.Hls?.isSupported()) {
     hlsPlayer = new window.Hls();
     const activeHlsPlayer = hlsPlayer;
     mediaReady = new Promise((resolve, reject) => {
@@ -310,6 +311,8 @@ function showMedia(url, title, videoId = '', updateAddress = true, mediaType = '
     });
     activeHlsPlayer.loadSource(currentMediaUrl);
     activeHlsPlayer.attachMedia(player);
+  } else if (isHls && !player.canPlayType('application/vnd.apple.mpegurl')) {
+    throw new Error('This browser does not support HLS playback.');
   } else {
     player.src = currentMediaUrl;
     player.load();
@@ -327,38 +330,67 @@ function showMedia(url, title, videoId = '', updateAddress = true, mediaType = '
   return mediaReady;
 }
 
+async function attemptFallback() {
+  if (!currentFallbackStream) return fallbackAttempt || false;
+  if (fallbackAttempt) return fallbackAttempt;
+  const fallback = currentFallbackStream;
+  currentFallbackStream = null;
+  const attempt = (async () => {
+    try {
+      const url = parseMediaUrl(fallback.url);
+      await showMedia(url, videoLabel.textContent, currentVideoId, true, fallback.type);
+      await player.play();
+      message.textContent = '';
+      return true;
+    } catch (error) {
+      if (error.name === 'NotAllowedError') {
+        message.textContent = 'HLS stream loaded. Press play to start.';
+        return true;
+      }
+      message.textContent = `The video stream failed, and its HLS fallback could not be played: ${error.message}`;
+      return false;
+    }
+  })();
+  fallbackAttempt = attempt;
+  try {
+    return await attempt;
+  } finally {
+    if (fallbackAttempt === attempt) fallbackAttempt = null;
+  }
+}
+
 async function playVideo(videoId, title = '', updateAddress = true) {
   const requestId = ++playbackRequestId;
   message.textContent = 'Finding a playable stream…';
   try {
     const result = await requestJson(`/api/videos/${encodeURIComponent(videoId)}/stream`);
     if (requestId !== playbackRequestId) return;
-    const streams = [result];
     if (result.fallback) {
       if (typeof result.fallback.url !== 'string' || !['mp4', 'hls'].includes(result.fallback.type)) {
         throw new Error('The server returned an invalid fallback stream.');
       }
-      streams.push(result.fallback);
     }
-    for (const [index, stream] of streams.entries()) {
-      try {
-        const url = parseMediaUrl(stream.url);
-        await showMedia(url, title || result.title || 'YouTube video', videoId, updateAddress, stream.type);
-        if (requestId !== playbackRequestId) return;
-        await player.play();
-        message.textContent = '';
-        document.querySelector('#watcher').scrollIntoView({ behavior: 'smooth', block: 'start' });
-        return;
-      } catch (error) {
-        if (requestId !== playbackRequestId) return;
-        if (error.name === 'NotAllowedError') {
-          message.textContent = 'Stream loaded. Press play to start.';
-          document.querySelector('#watcher').scrollIntoView({ behavior: 'smooth', block: 'start' });
-          return;
-        }
-        if (index === streams.length - 1) throw error;
+    const url = parseMediaUrl(result.url);
+    await showMedia(
+      url,
+      title || result.title || 'YouTube video',
+      videoId,
+      updateAddress,
+      result.type,
+      result.fallback || null,
+    );
+    if (requestId !== playbackRequestId) return;
+    try {
+      await player.play();
+      message.textContent = '';
+    } catch (error) {
+      if (error.name === 'NotAllowedError') {
+        message.textContent = 'Stream loaded. Press play to start.';
+      } else {
+        await attemptFallback();
       }
     }
+    document.querySelector('#watcher').scrollIntoView({ behavior: 'smooth', block: 'start' });
   } catch (error) {
     if (requestId === playbackRequestId) message.textContent = error.message;
   }
@@ -366,6 +398,8 @@ async function playVideo(videoId, title = '', updateAddress = true) {
 
 function clearMedia(updateAddress = true) {
   playbackRequestId += 1;
+  currentFallbackStream = null;
+  fallbackAttempt = null;
   if (hlsPlayer) {
     if (cancelHlsStartup) cancelHlsStartup(new Error('Playback was cancelled.'));
     hlsPlayer.destroy();
@@ -398,7 +432,11 @@ async function togglePlayback() {
     await player.play();
     message.textContent = '';
   } catch (error) {
-    message.textContent = `Playback could not start: ${error.message}`;
+    if (currentFallbackStream || fallbackAttempt) {
+      await attemptFallback();
+    } else {
+      message.textContent = `Playback could not start: ${error.message}`;
+    }
   }
 }
 
@@ -436,7 +474,9 @@ player.addEventListener('durationchange', updateTime);
 player.addEventListener('loadedmetadata', updateTime);
 player.addEventListener('volumechange', updateVolume);
 player.addEventListener('error', () => {
-  if (currentMediaUrl) {
+  if (currentFallbackStream) {
+    void attemptFallback();
+  } else if (currentMediaUrl && !fallbackAttempt) {
     message.textContent = 'The media could not be played. Check the URL, access permissions, format, and browser support.';
   }
 });
