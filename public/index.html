@@ -40,6 +40,9 @@
           </div>
         </form>
         <div class="results-heading"><h2 id="results-title">Search results</h2><span id="search-status" aria-live="polite">Search for a video or playlist.</span></div>
+        <div class="playlist-controls" id="playlist-controls" hidden>
+          <button class="result-action" id="play-playlist-button" type="button">Autoplay entire playlist</button>
+        </div>
         <div class="video-grid" id="search-results" aria-live="polite"></div>
         <button class="next-page-button" id="next-page-button" type="button" hidden>More results</button>
       </section>
@@ -70,6 +73,7 @@
         <div class="player-bar" id="player-bar" hidden>
           <div class="now-playing"><span class="playing-mark"></span><span id="source-label">DIRECT MEDIA</span></div>
           <div class="player-actions">
+            <button class="result-action loop-playlist-button" id="loop-playlist-button" type="button" aria-pressed="false" hidden>Loop playlist</button>
             <button class="icon-button" id="share-button" type="button" title="Copy share link" aria-label="Copy share link" disabled><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.1 0l2-2A5 5 0 0 0 12 3.9l-1.1 1.1m3.1 6a5 5 0 0 0-7.1 0l-2 2A5 5 0 0 0 12 20.1l1.1-1.1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
             <button class="icon-button" id="clear-button" type="button" title="Clear video" aria-label="Clear video"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
           </div>
@@ -86,7 +90,7 @@
         <div class="detail-block">
           <span class="detail-index">02 / CONTROLS</span>
           <h2>Simple playback</h2>
-          <p>YouTube videos use YouTube's own player controls through its privacy-enhanced embed. Direct MP4 and HLS URLs use your browser's native video controls.</p>
+          <p>YouTube videos use YouTube's own player controls through its privacy-enhanced embed. Playlists can be autoplayed in order and optionally looped. Direct MP4 and HLS URLs use your browser's native video controls.</p>
         </div>
         <div class="detail-block">
           <span class="detail-index">03 / PRIVACY</span>

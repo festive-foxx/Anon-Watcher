@@ -7,6 +7,8 @@ const searchStatus = document.querySelector('#search-status');
 const resultsTitle = document.querySelector('#results-title');
 const searchResults = document.querySelector('#search-results');
 const nextPageButton = document.querySelector('#next-page-button');
+const playlistControls = document.querySelector('#playlist-controls');
+const playPlaylistButton = document.querySelector('#play-playlist-button');
 const player = document.querySelector('#media-player');
 const youtubePlayer = document.querySelector('#youtube-player');
 const emptyPlayer = document.querySelector('#empty-player');
@@ -14,10 +16,13 @@ const playerBar = document.querySelector('#player-bar');
 const videoLabel = document.querySelector('#video-label');
 const sourceLabel = document.querySelector('#source-label');
 const shareButton = document.querySelector('#share-button');
+const loopPlaylistButton = document.querySelector('#loop-playlist-button');
 const clearButton = document.querySelector('#clear-button');
 const message = document.querySelector('#message');
 let currentMediaUrl = '';
 let currentVideoId = '';
+let currentPlaylistId = '';
+let playlistLoopEnabled = false;
 let hlsPlayer = null;
 let cancelHlsStartup = null;
 let searchRequestId = 0;
@@ -201,6 +206,7 @@ function startSearch(query, type = searchType.value, updateAddress = true) {
   resultQuery = trimmed;
   resultType = type;
   resultPlaylistId = '';
+  playlistControls.hidden = true;
   resultsTitle.textContent = `Results for “${trimmed}”`;
   searchInput.value = trimmed;
   searchType.value = type;
@@ -218,6 +224,7 @@ function browsePlaylist(playlistId, title, updateAddress = true) {
   resultMode = 'playlist';
   resultQuery = '';
   resultPlaylistId = playlistId;
+  playlistControls.hidden = false;
   resultsTitle.textContent = title;
   searchStatus.textContent = 'Loading playlist…';
   loadResultPage();
@@ -247,6 +254,8 @@ function showMedia(url, title = '', updateAddress = true, mediaType = 'mp4') {
   player.hidden = false;
   currentMediaUrl = url.toString();
   currentVideoId = '';
+  currentPlaylistId = '';
+  loopPlaylistButton.hidden = true;
   input.value = currentMediaUrl;
   videoLabel.textContent = title || url.pathname.split('/').filter(Boolean).pop() || url.hostname;
   sourceLabel.textContent = url.hostname;
@@ -309,6 +318,8 @@ function showMedia(url, title = '', updateAddress = true, mediaType = 'mp4') {
 function showYouTubeVideo(videoId, title = '', updateAddress = true) {
   stopDirectPlayback();
   currentVideoId = videoId;
+  currentPlaylistId = '';
+  loopPlaylistButton.hidden = true;
   currentMediaUrl = `https://www.youtube.com/watch?v=${videoId}`;
   input.value = currentMediaUrl;
   videoLabel.textContent = title || 'YouTube video';
@@ -330,6 +341,45 @@ function showYouTubeVideo(videoId, title = '', updateAddress = true) {
   }
 }
 
+function playPlaylist(playlistId, title = '', updateAddress = true, scrollToPlayer = true) {
+  playbackRequestId += 1;
+  stopDirectPlayback();
+  currentVideoId = '';
+  currentPlaylistId = playlistId;
+  currentMediaUrl = '';
+  input.value = '';
+  videoLabel.textContent = title || 'YouTube playlist';
+  sourceLabel.textContent = 'YOUTUBE · PLAYLIST';
+  message.textContent = '';
+  emptyPlayer.hidden = true;
+  player.hidden = true;
+  youtubePlayer.hidden = false;
+  youtubePlayer.title = videoLabel.textContent;
+  const parameters = new URLSearchParams({
+    list: playlistId,
+    autoplay: '1',
+    controls: '1',
+    playsinline: '1',
+    rel: '0',
+  });
+  if (playlistLoopEnabled) parameters.set('loop', '1');
+  youtubePlayer.src = `https://www.youtube-nocookie.com/embed/videoseries?${parameters}`;
+  playerBar.hidden = false;
+  shareButton.disabled = false;
+  loopPlaylistButton.hidden = false;
+  loopPlaylistButton.setAttribute('aria-pressed', String(playlistLoopEnabled));
+
+  if (updateAddress) {
+    const shareUrl = new URL(window.location.href);
+    shareUrl.search = '';
+    shareUrl.searchParams.set('list', playlistId);
+    window.history.replaceState({}, '', shareUrl);
+  }
+  if (scrollToPlayer) {
+    document.querySelector('#watcher').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
+
 function playVideo(videoId, title = '', updateAddress = true) {
   playbackRequestId += 1;
   showYouTubeVideo(videoId, title, updateAddress);
@@ -344,6 +394,8 @@ function clearMedia(updateAddress = true) {
   player.hidden = false;
   currentMediaUrl = '';
   currentVideoId = '';
+  currentPlaylistId = '';
+  loopPlaylistButton.hidden = true;
   input.value = '';
   videoLabel.textContent = 'Open a video';
   sourceLabel.textContent = 'DIRECT MEDIA';
@@ -393,6 +445,20 @@ nextPageButton.addEventListener('click', () => {
   if (!nextPageToken || nextPageButton.disabled) return;
   loadResultPage(nextPageToken, true);
 });
+playPlaylistButton.addEventListener('click', () => {
+  if (resultPlaylistId) playPlaylist(resultPlaylistId, resultsTitle.textContent);
+});
+loopPlaylistButton.addEventListener('click', () => {
+  if (!currentPlaylistId) return;
+  playlistLoopEnabled = !playlistLoopEnabled;
+  loopPlaylistButton.setAttribute('aria-pressed', String(playlistLoopEnabled));
+  const playlistId = currentPlaylistId;
+  const title = videoLabel.textContent;
+  playPlaylist(playlistId, title, false, false);
+  message.textContent = playlistLoopEnabled
+    ? 'Loop enabled; the playlist restarted.'
+    : 'Loop disabled; the playlist restarted.';
+});
 
 player.addEventListener('error', () => {
   if (currentMediaUrl && !currentVideoId) {
@@ -401,16 +467,19 @@ player.addEventListener('error', () => {
 });
 
 shareButton.addEventListener('click', async () => {
-  if (!currentMediaUrl) return;
+  if (!currentMediaUrl && !currentVideoId && !currentPlaylistId) return;
   const shareUrl = new URL(window.location.href);
   shareUrl.search = '';
-  if (currentVideoId) shareUrl.searchParams.set('yt', currentVideoId);
+  if (currentPlaylistId) shareUrl.searchParams.set('list', currentPlaylistId);
+  else if (currentVideoId) shareUrl.searchParams.set('yt', currentVideoId);
   else shareUrl.searchParams.set('video', currentMediaUrl);
   try {
     await navigator.clipboard.writeText(shareUrl.toString());
-    message.textContent = currentVideoId
-      ? 'Share link copied.'
-      : 'Share link copied. It contains the full media URL.';
+    message.textContent = currentPlaylistId
+      ? 'Playlist link copied.'
+      : currentVideoId
+        ? 'Share link copied.'
+        : 'Share link copied. It contains the full media URL.';
   } catch (error) {
     message.textContent = `Could not copy the share link: ${error.message}`;
   }
