@@ -405,6 +405,9 @@ const httpServer = createServer(async (request, response) => {
     const assets = {
       '/app.css': ['app.css', 'text/css; charset=utf-8'],
       '/app.js': ['app.js', 'text/javascript; charset=utf-8'],
+      '/robots.txt': ['robots.txt', 'text/plain; charset=utf-8'],
+      '/sitemap.xml': ['sitemap.xml', 'application/xml; charset=utf-8'],
+      '/googlec56a30c851f15227.html': ['googlec56a30c851f15227.html', 'text/html; charset=utf-8'],
     };
     if (request.method === 'GET' && requestUrl.pathname === '/vendor/hls.min.js') {
       response.writeHead(200, {
