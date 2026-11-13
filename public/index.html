@@ -16,35 +16,26 @@
         <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M5 4.8c0-.8.9-1.3 1.6-.9l13 7.2a1 1 0 0 1 0 1.8l-13 7.2c-.7.4-1.6-.1-1.6-.9V4.8Z" fill="currentColor"/></svg></span>
         <span>anon watcher</span>
       </a>
-      <div class="top-note"><span class="live-dot"></span> SEARCH · SIMPLE PLAYER</div>
+      <div class="top-actions">
+        <button class="header-button" id="library-button" type="button" aria-expanded="false">Library</button>
+        <button class="header-button" id="settings-button" type="button">Settings</button>
+      </div>
     </header>
 
     <main>
-      <section class="intro">
-        <p class="kicker">Find something to watch</p>
-        <h1>Search it.<br>Watch it here.</h1>
-        <p class="lede">Search YouTube videos and playlists, then watch in a simple, privacy-enhanced player.</p>
-      </section>
-
-      <section class="search-panel" aria-label="Search YouTube">
-        <form id="search-form" class="search-form" role="search">
-          <label for="search-query">Search videos and playlists</label>
-          <div class="search-row">
-            <input id="search-query" type="search" placeholder="Search YouTube" autocomplete="off" required>
+      <section class="unified-search" aria-label="Search or play media">
+        <form id="unified-form" class="unified-form" role="search">
+          <label for="unified-input">Search or paste a YouTube link, video ID, or direct media URL</label>
+          <div class="input-row">
+            <input id="unified-input" name="query" type="search" placeholder="Search YouTube or paste a link / video ID" autocomplete="off" autocapitalize="off" spellcheck="false" required>
             <select id="search-type" aria-label="Search type">
               <option value="all">All</option>
               <option value="video">Videos</option>
               <option value="playlist">Playlists</option>
             </select>
-            <button class="watch-button" type="submit">Search</button>
+            <button class="watch-button" type="submit">Go</button>
           </div>
         </form>
-        <div class="results-heading"><h2 id="results-title">Search results</h2><span id="search-status" aria-live="polite">Search for a video or playlist.</span></div>
-        <div class="playlist-controls" id="playlist-controls" hidden>
-          <button class="result-action" id="play-playlist-button" type="button">Autoplay entire playlist</button>
-        </div>
-        <div class="video-grid" id="search-results" aria-live="polite"></div>
-        <button class="next-page-button" id="next-page-button" type="button" hidden>More results</button>
       </section>
 
       <section class="watcher" id="watcher" aria-label="Video player">
@@ -52,15 +43,6 @@
           <div><p class="kicker">NOW PLAYING</p><h2 id="video-label">Open a video</h2></div>
           <span>PRIVACY-ENHANCED PLAYER</span>
         </div>
-        <form id="watch-form" class="watch-form">
-          <label for="video-link">Paste a YouTube link, video ID, or direct media URL</label>
-          <div class="input-row">
-            <input id="video-link" name="video" type="text" placeholder="YouTube link, video ID, or https://example.com/video.mp4" autocomplete="off" autocapitalize="off" spellcheck="false" required>
-            <button class="watch-button" type="submit"><span>Watch</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-          </div>
-          <p class="form-hint">YouTube videos use YouTube's privacy-enhanced embed. Direct MP4 and HLS (.m3u8) media URLs are also supported.</p>
-        </form>
-
         <div class="player-wrap" id="player-wrap" aria-label="Video player">
           <iframe id="youtube-player" title="YouTube video" allow="autoplay; encrypted-media; picture-in-picture; web-share; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin" hidden></iframe>
           <video id="media-player" preload="metadata" playsinline controls aria-label="Direct media video" hidden></video>
@@ -74,34 +56,62 @@
           <div class="now-playing"><span class="playing-mark"></span><span id="source-label">DIRECT MEDIA</span></div>
           <div class="player-actions">
             <button class="result-action loop-playlist-button" id="loop-playlist-button" type="button" aria-pressed="false" hidden>Loop playlist</button>
-            <button class="icon-button" id="share-button" type="button" title="Copy share link" aria-label="Copy share link" disabled><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.1 0l2-2A5 5 0 0 0 12 3.9l-1.1 1.1m3.1 6a5 5 0 0 0-7.1 0l-2 2A5 5 0 0 0 12 20.1l1.1-1.1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+            <button class="result-action" id="favorite-button" type="button" aria-pressed="false">Save</button>
+            <button class="result-action" id="theater-button" type="button" aria-pressed="false">Theater</button>
+            <button class="result-action" id="share-button" type="button" disabled>Copy Anon Link</button>
             <button class="icon-button" id="clear-button" type="button" title="Clear video" aria-label="Clear video"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
           </div>
         </div>
         <p class="message" id="message" role="status" aria-live="polite"></p>
       </section>
 
+      <section class="search-panel" id="results-panel" aria-label="Search results" hidden>
+        <div class="results-heading"><h2 id="results-title">Search results</h2><span id="search-status" aria-live="polite"></span></div>
+        <div class="playlist-controls" id="playlist-controls" hidden>
+          <button class="result-action" id="play-playlist-button" type="button">Autoplay entire playlist</button>
+        </div>
+        <div class="video-grid" id="search-results" aria-live="polite"></div>
+        <button class="next-page-button" id="next-page-button" type="button" hidden>More results</button>
+      </section>
+
       <section class="details" aria-label="Player information">
         <div class="detail-block">
           <span class="detail-index">01 / SOURCES</span>
           <h2>Search and watch</h2>
-          <p>Search uses the YouTube Data API through the Anon Watcher server. A server-side API key is required. Search results can include videos and playlists.</p>
+          <p>Search uses the YouTube Data API through the Anon Watcher server, with an optional browser-only fallback key in Settings. Search results can include videos and playlists.</p>
         </div>
         <div class="detail-block">
           <span class="detail-index">02 / CONTROLS</span>
           <h2>Simple playback</h2>
-          <p>YouTube videos use YouTube's own player controls through its privacy-enhanced embed. Playlists can be autoplayed in order and optionally looped. Direct MP4 and HLS URLs use your browser's native video controls.</p>
+          <p>YouTube videos use YouTube's privacy-enhanced embed. Space toggles playback, F toggles fullscreen, and M toggles mute; shortcuts are inactive while typing. Direct MP4 and HLS URLs use native controls.</p>
         </div>
         <div class="detail-block">
           <span class="detail-index">03 / PRIVACY</span>
           <h2>Privacy-enhanced embed</h2>
-          <p>YouTube playback is served from youtube-nocookie.com. YouTube may still process data when you play an embedded video. Direct media is played by your browser.</p>
+          <p>Watch history, saved items, and an optional API key stay in this browser. YouTube playback uses youtube-nocookie.com; YouTube may still process data when an embed is played.</p>
         </div>
       </section>
     </main>
 
     <footer><span>ANON WATCHER</span><span>YOUTUBE SEARCH · PLAYLISTS · SIMPLE PLAYER</span></footer>
   </div>
+  <aside class="library-drawer" id="library-drawer" aria-label="Local library" hidden>
+    <div class="drawer-header"><h2>Your library</h2><button class="icon-button" id="close-library-button" type="button" aria-label="Close library">×</button></div>
+    <section><h3>Saved</h3><div id="saved-items" class="library-list"></div></section>
+    <section><h3>Watch history</h3><div id="history-items" class="library-list"></div></section>
+    <button class="result-action clear-data-button" id="clear-data-button" type="button">Clear local data</button>
+  </aside>
+  <div class="drawer-backdrop" id="drawer-backdrop" hidden></div>
+  <dialog id="settings-dialog">
+    <form method="dialog" class="settings-form" id="settings-form">
+      <div class="drawer-header"><h2>Search settings</h2><button class="icon-button" type="submit" value="cancel" aria-label="Close settings">×</button></div>
+      <label for="api-key-input">YouTube Data API key</label>
+      <input id="api-key-input" type="password" autocomplete="off" spellcheck="false" placeholder="Optional fallback key">
+      <p>Your key is stored only in this browser and is used directly with YouTube if server search is unavailable or over quota.</p>
+      <div class="settings-actions"><button class="result-action" id="remove-api-key-button" type="button">Remove key</button><button class="watch-button" id="save-settings-button" type="button">Save key</button></div>
+      <p class="settings-status" id="settings-status" role="status"></p>
+    </form>
+  </dialog>
   <script src="/vendor/hls.min.js" defer></script>
   <script src="app.js" defer></script>
 </body>

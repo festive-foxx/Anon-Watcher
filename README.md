@@ -1,5 +1,7 @@
 # Anon Watcher
 
-Anon Watcher searches YouTube videos and playlists with the YouTube Data API and plays videos in YouTube's privacy-enhanced embed. Open a playlist and choose **Autoplay entire playlist** to play its videos in order; use **Loop playlist** in the player bar to restart the playlist after its last video. Changing the loop setting restarts the playlist. You can also paste a YouTube video URL or 11-character video ID. Direct MP4 and HLS (`.m3u8`) URLs use the browser's native video controls; HLS support depends on the browser.
+Anon Watcher uses one input to search YouTube videos and playlists, play a YouTube URL or 11-character video ID, or play a direct MP4/HLS (`.m3u8`) URL. Playback appears above search results. Open a playlist and choose **Autoplay entire playlist** to play its videos in order; use **Loop playlist** in the player bar to restart the playlist after its last video.
 
-YouTube search requires a server-side API key. Set `YOUTUBE_API_KEY` before starting the Anon Watcher server.
+Watch history, saved videos, and an optional YouTube Data API fallback key stay in browser `localStorage`. The fallback key is sent directly from the browser to YouTube when server search is unavailable or over quota. YouTube playback uses the `youtube-nocookie.com` embed. Direct media is played by the browser; HLS support depends on the browser.
+
+YouTube search normally requires a server-side key. Set `YOUTUBE_API_KEY` before starting the Anon Watcher server, or add an optional fallback key in **Settings**. `GET /health` provides a lightweight server health check.
