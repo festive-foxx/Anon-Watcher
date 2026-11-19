@@ -114,36 +114,6 @@
   </dialog>
   <script src="/vendor/hls.min.js" defer></script>
   <script src="app.js" defer></script>
-<script type="module">
-  import { initializeApp } from "https://gstatic.com";
-  import { getFirestore, collection, addDoc, serverTimestamp } from "https://gstatic.com";
-
-  const firebaseConfig = {
-    apiKey: "AIzaSyC6SE2dKFIqFPRpap_1JNgBCxDhWwh1m5Y",
-    authDomain: "anon-watcher.firebaseapp.com",
-    projectId: "anon-watcher",
-    storageBucket: "anon-watcher.firebasestorage.app",
-    messagingSenderId: "58478917976",
-    appId: "1:58478917976:web:57105e2d4a4a488878d2d",
-    measurementId: "G-M5QYKW4EPX"
-  };
-
-  const app = initializeApp(firebaseConfig);
-  const db = getFirestore(app);
-
-  async function logVisit() {
-    try {
-      await addDoc(collection(db, "visitors"), {
-        visitedAt: serverTimestamp(),
-        page: window.location.pathname,
-        device: navigator.userAgent
-      });
-    } catch (error) {
-      console.error("Error logging visit:", error);
-    }
-  }
-
-  logVisit();
-  </script>
+<!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "3cac9382eb374bc3beee841b7c284fa3"}'></script><!-- End Cloudflare Web Analytics -->
 </body>
 </html>
