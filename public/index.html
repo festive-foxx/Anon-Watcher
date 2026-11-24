@@ -3,43 +3,118 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#f3f2ec">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#f3f2ec" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#121210" media="(prefers-color-scheme: dark)">
   <meta name="description" content="Search YouTube and watch videos in a privacy-enhanced embedded player.">
   <title>Anon Watcher | Search and watch</title>
-  <link rel="canonical" href="https://github.io">
+  <link rel="canonical" href="https://festive-foxx.github.io/Anon-Watcher/">
   <link rel="stylesheet" href="app.css">
-  <script defer src="https://umami.is" data-website-id="9cc28547-9734-4c45-9873-7d4c90eaea20"></script>
+  <script defer src="https://cloud.umami.is/script.js" data-website-id="9cc28547-9734-4c45-9873-7d4c90eaea20"></script>
 </head>
 <body>
-  <!-- Main application shell containing search, video player, and library components -->
   <div class="shell">
     <header class="topbar">
       <a class="brand" href="./" aria-label="Anon Watcher home">
+        <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M5 4.8c0-.8.9-1.3 1.6-.9l13 7.2a1 1 0 0 1 0 1.8l-13 7.2c-.7.4-1.6-.1-1.6-.9V4.8Z" fill="currentColor"/></svg></span>
         <span>anon watcher</span>
       </a>
       <div class="top-actions">
-        <button class="header-button" id="library-button" type="button">Library</button>
+        <button class="header-button" id="library-button" type="button" aria-expanded="false">Library</button>
         <button class="header-button" id="settings-button" type="button">Settings</button>
       </div>
     </header>
+
     <main>
       <section class="unified-search" aria-label="Search or play media">
         <form id="unified-form" class="unified-form" role="search">
-          <input id="unified-input" name="query" type="search" placeholder="Search YouTube or paste a link / video ID" required>
-          <button class="watch-button" type="submit">Go</button>
+          <label for="unified-input">Search or paste a YouTube link, video ID, or direct media URL</label>
+          <div class="input-row">
+            <input id="unified-input" name="query" type="search" placeholder="Search YouTube or paste a link / video ID" autocomplete="off" autocapitalize="off" spellcheck="false" required>
+            <select id="search-type" aria-label="Search type">
+              <option value="all">All</option>
+              <option value="video">Videos</option>
+              <option value="playlist">Playlists</option>
+            </select>
+            <button class="watch-button" type="submit">Go</button>
+          </div>
         </form>
       </section>
+
       <section class="watcher" id="watcher" aria-label="Video player">
-        <div class="player-wrap" id="player-wrap">
-          <iframe id="youtube-player" title="YouTube video" hidden></iframe>
-          <video id="media-player" preload="metadata" playsinline controls hidden></video>
+        <div class="watcher-heading">
+          <div><p class="kicker">NOW PLAYING</p><h2 id="video-label">Open a video</h2></div>
+          <span>PRIVACY-ENHANCED PLAYER</span>
+        </div>
+        <div class="player-wrap" id="player-wrap" aria-label="Video player">
+          <iframe id="youtube-player" title="YouTube video" allow="autoplay; encrypted-media; picture-in-picture; web-share; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin" hidden></iframe>
+          <video id="media-player" preload="metadata" playsinline controls aria-label="Direct media video" hidden></video>
           <div class="empty-player" id="empty-player">
+            <span class="empty-glyph" aria-hidden="true"><svg viewBox="0 0 48 48" fill="none"><path d="M9 10.5c0-2 2.2-3.2 4-2.2l27 14.5a1.4 1.4 0 0 1 0 2.4l-27 14.5c-1.8 1-4-.2-4-2.2v-27Z" fill="currentColor"/></svg></span>
             <p>Paste a YouTube link or search for a video to get started.</p>
           </div>
         </div>
+
+        <div class="player-bar" id="player-bar" hidden>
+          <div class="now-playing"><span class="playing-mark"></span><span id="source-label">DIRECT MEDIA</span></div>
+          <div class="player-actions">
+            <button class="result-action loop-playlist-button" id="loop-playlist-button" type="button" aria-pressed="false" hidden>Loop playlist</button>
+            <button class="result-action" id="favorite-button" type="button" aria-pressed="false">Save</button>
+            <button class="result-action" id="theater-button" type="button" aria-pressed="false">Theater</button>
+            <button class="result-action" id="share-button" type="button" disabled>Copy Anon Link</button>
+            <button class="icon-button" id="clear-button" type="button" title="Clear video" aria-label="Clear video"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+          </div>
+        </div>
+        <p class="message" id="message" role="status" aria-live="polite"></p>
+      </section>
+
+      <section class="search-panel" id="results-panel" aria-label="Search results" hidden>
+        <div class="results-heading"><h2 id="results-title">Search results</h2><span id="search-status" aria-live="polite"></span></div>
+        <div class="playlist-controls" id="playlist-controls" hidden>
+          <button class="result-action" id="play-playlist-button" type="button">Autoplay entire playlist</button>
+        </div>
+        <div class="video-grid" id="search-results" aria-live="polite"></div>
+        <button class="next-page-button" id="next-page-button" type="button" hidden>More results</button>
+      </section>
+
+      <section class="details" aria-label="Player information">
+        <div class="detail-block">
+          <span class="detail-index">01 / SOURCES</span>
+          <h2>Search and watch</h2>
+          <p>Search uses the YouTube Data API through the Anon Watcher server, with an optional browser-only fallback key in Settings. Search results can include videos and playlists.</p>
+        </div>
+        <div class="detail-block">
+          <span class="detail-index">02 / CONTROLS</span>
+          <h2>Simple playback</h2>
+          <p>YouTube videos use YouTube's privacy-enhanced embed. Space toggles playback, F toggles fullscreen, and M toggles mute; shortcuts are inactive while typing. Direct MP4 and HLS URLs use native controls.</p>
+        </div>
+        <div class="detail-block">
+          <span class="detail-index">03 / PRIVACY</span>
+          <h2>Privacy-enhanced embed</h2>
+          <p>Watch history, saved items, and an optional API key stay in this browser. YouTube playback uses youtube-nocookie.com; YouTube may still process data when an embed is played.</p>
+        </div>
       </section>
     </main>
+
+    <footer><span>ANON WATCHER</span><span>YOUTUBE SEARCH · PLAYLISTS · SIMPLE PLAYER</span></footer>
   </div>
+  <aside class="library-drawer" id="library-drawer" aria-label="Local library" hidden>
+    <div class="drawer-header"><h2>Your library</h2><button class="icon-button" id="close-library-button" type="button" aria-label="Close library">×</button></div>
+    <section><h3>Saved</h3><div id="saved-items" class="library-list"></div></section>
+    <section><h3>Watch history</h3><div id="history-items" class="library-list"></div></section>
+    <button class="result-action clear-data-button" id="clear-data-button" type="button">Clear local data</button>
+  </aside>
+  <div class="drawer-backdrop" id="drawer-backdrop" hidden></div>
+  <dialog id="settings-dialog">
+    <form method="dialog" class="settings-form" id="settings-form">
+      <div class="drawer-header"><h2>Search settings</h2><button class="icon-button" type="submit" value="cancel" aria-label="Close settings">×</button></div>
+      <label for="api-key-input">YouTube Data API key</label>
+      <input id="api-key-input" type="password" autocomplete="off" spellcheck="false" placeholder="Optional fallback key">
+      <p>Your key is stored only in this browser and is used directly with YouTube if server search is unavailable or over quota.</p>
+      <div class="settings-actions"><button class="result-action" id="remove-api-key-button" type="button">Remove key</button><button class="watch-button" id="save-settings-button" type="button">Save key</button></div>
+      <p class="settings-status" id="settings-status" role="status"></p>
+    </form>
+  </dialog>
   <script src="/vendor/hls.min.js" defer></script>
   <script src="app.js" defer></script>
 </body>
